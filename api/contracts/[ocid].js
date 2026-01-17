@@ -13,10 +13,19 @@ export default async function handler(req, res) {
     const ocid = encodeURIComponent(ocidParam);
     const urlString = detailTemplate.replace('{ocid}', ocid);
     const url = new URL(urlString);
-    applyQuery(url, req.query, ['ocid']);
+    applyQuery(url, req.query, ['ocid', 'debug']);
+    if (isDebug(req.query)) {
+      res.setHeader('x-upstream-url', url.toString());
+    }
 
     const upstream = await fetch(url.toString(), {
-      headers: { accept: 'application/json' }
+      headers: {
+        accept: 'application/json',
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+          '(KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+        'accept-language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7'
+      }
     });
 
     const body = await upstream.text();
@@ -49,4 +58,9 @@ function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('content-type', 'application/json');
   res.end(JSON.stringify(payload));
+}
+
+function isDebug(query) {
+  const value = Array.isArray(query?.debug) ? query.debug[0] : query?.debug;
+  return value === '1' || value === 'true';
 }
