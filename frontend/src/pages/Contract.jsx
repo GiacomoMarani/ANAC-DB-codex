@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { extractRelease, normalizeItem, formatCurrency, formatDate } from '../lib/normalize.js';
+import { getApiBase } from '../lib/api.js';
 
 export default function Contract() {
+  const apiBase = getApiBase();
   const { ocid } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -14,7 +16,7 @@ export default function Contract() {
     let isActive = true;
     setLoading(true);
     setError('');
-    fetch(`/api/contracts/${encodeURIComponent(ocid)}`)
+    fetch(`${apiBase}/api/contracts/${encodeURIComponent(ocid)}`)
       .then((res) => {
         if (!res.ok) {
           throw new Error(`Request failed (${res.status})`);

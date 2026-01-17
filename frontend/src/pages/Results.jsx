@@ -4,8 +4,10 @@ import SearchBar from '../components/SearchBar.jsx';
 import Filters from '../components/Filters.jsx';
 import ResultCard from '../components/ResultCard.jsx';
 import { extractItems, normalizeItem, formatCurrency } from '../lib/normalize.js';
+import { getApiBase } from '../lib/api.js';
 
 export default function Results() {
+  const apiBase = getApiBase();
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get('q') || '';
   const [query, setQuery] = useState(q);
@@ -24,7 +26,7 @@ export default function Results() {
     let isActive = true;
     setLoading(true);
     setError('');
-    fetch(`/api/search?${searchParams.toString()}`)
+    fetch(`${apiBase}/api/search?${searchParams.toString()}`)
       .then((res) => {
         if (!res.ok) {
           throw new Error(`Request failed (${res.status})`);
