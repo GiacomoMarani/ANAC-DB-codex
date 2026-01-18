@@ -4,14 +4,15 @@ This project provides a React frontend and Vercel serverless API proxy for the A
 focused on searching releases by CIG (tender ID).
 
 Note: the public API does not expose free-text search, so the UI is CIG-based.
+The proxy resolves CIGs by calling `awards/tender/{id}` and then fetching releases by award ID.
 
 ## Prerequisites
 - Node.js 18+
 - Vercel CLI (optional for local API testing)
 
 ## Configure
-1) Set `ANAC_SEARCH_URL` (releases by tender ID) and `ANAC_DETAIL_URL` in Vercel project envs
-   (see `.env.example`).
+1) Set `ANAC_AWARDS_TENDER_URL`, `ANAC_RELEASES_AWARD_URL`, and `ANAC_DETAIL_URL` in Vercel
+   project envs (see `.env.example`).
 2) For local dev, copy `.env.example` to `.env` for `vercel dev`.
 3) Optional: copy `frontend/.env.example` to `frontend/.env` to point Vite at `http://localhost:3000`.
 

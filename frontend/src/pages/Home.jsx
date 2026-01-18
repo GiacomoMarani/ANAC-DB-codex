@@ -20,13 +20,13 @@ export default function Home() {
       <div className="hero">
         <div className="hero-text">
           <h1>Find contracts by CIG</h1>
-          <p>Insert a CIG (tender ID) to retrieve all related releases from ANAC.</p>
+          <p>Insert a CIG (item ID) to retrieve all related releases from ANAC.</p>
         </div>
         <SearchBar
           value={query}
           onChange={setQuery}
           onSubmit={handleSubmit}
-          placeholder="Enter a CIG (e.g. 822799329F)"
+          placeholder="Enter a CIG / item ID (e.g. 822799329F)"
           autoFocus
         />
         <div className="examples">

@@ -124,7 +124,7 @@ export default function Results() {
           value={query}
           onChange={setQuery}
           onSubmit={handleSubmit}
-          placeholder="Search by CIG (e.g. 822799329F)"
+          placeholder="Search by CIG / item ID (e.g. 822799329F)"
         />
         <div className="results-actions">
           <button type="button" className="ghost-button" onClick={handleExport}>
@@ -137,10 +137,7 @@ export default function Results() {
         <aside className="filters">
           <div className="cig-help">
             <h3>Search by CIG</h3>
-            <p>
-              The ANAC API exposes releases by tender ID. Enter a CIG to retrieve all related
-              releases.
-            </p>
+            <p>Enter the CIG (item ID) to retrieve the releases linked to that tender.</p>
             <div className="example-list">
               <button type="button" className="example-chip" onClick={() => handleSubmit('822799329F')}>
                 822799329F
