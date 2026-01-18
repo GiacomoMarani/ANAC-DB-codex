@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { extractRelease, normalizeItem, formatCurrency, formatDate } from '../lib/normalize.js';
 import { getApiBase } from '../lib/api.js';
 
 export default function Contract() {
   const apiBase = getApiBase();
   const { ocid } = useParams();
+  const [searchParams] = useSearchParams();
+  const source = searchParams.get('source') || '';
+  const isSmartCig = source === 'smartcig';
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -16,7 +19,10 @@ export default function Contract() {
     let isActive = true;
     setLoading(true);
     setError('');
-    fetch(`${apiBase}/api/contracts/${encodeURIComponent(ocid)}`)
+    const endpoint = isSmartCig
+      ? `${apiBase}/api/search?cig=${encodeURIComponent(ocid)}`
+      : `${apiBase}/api/contracts/${encodeURIComponent(ocid)}`;
+    fetch(endpoint)
       .then((res) => {
         if (!res.ok) {
           throw new Error(`Request failed (${res.status})`);
@@ -42,11 +48,12 @@ export default function Contract() {
     return () => {
       isActive = false;
     };
-  }, [ocid]);
+  }, [apiBase, ocid, isSmartCig]);
 
   const release = useMemo(() => extractRelease(data), [data]);
   const summary = useMemo(() => (release ? normalizeItem(release) : null), [release]);
   const hasValue = summary?.value !== null && summary?.value !== undefined && summary?.value !== '';
+  const showOcdsDetails = summary?.source !== 'smartcig';
 
   const documents = useMemo(() => {
     if (!release) return [];
@@ -73,7 +80,7 @@ export default function Contract() {
             <div>
               <h1>{summary?.title || 'Contract detail'}</h1>
               <div className="meta">
-                <span>OCID: {summary?.ocid || ocid}</span>
+                {summary?.ocid ? <span>OCID: {summary.ocid}</span> : null}
                 <span>{summary?.cig ? `CIG: ${summary.cig}` : 'CIG n/a'}</span>
                 <span>{summary?.date ? formatDate(summary.date) : 'Date n/a'}</span>
                 <span>{summary?.authority || 'Authority n/a'}</span>
@@ -117,56 +124,62 @@ export default function Contract() {
               </dl>
             </div>
 
-            <div className="detail-card">
-              <h3>Parties</h3>
-              {parties.length ? (
-                <ul className="tag-list">
-                  {parties.map((party) => (
-                    <li key={party.id || party.name} className="tag">
-                      {party.name || party.id}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No party data available.</p>
-              )}
-            </div>
+            {showOcdsDetails && (
+              <div className="detail-card">
+                <h3>Parties</h3>
+                {parties.length ? (
+                  <ul className="tag-list">
+                    {parties.map((party) => (
+                      <li key={party.id || party.name} className="tag">
+                        {party.name || party.id}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No party data available.</p>
+                )}
+              </div>
+            )}
 
-            <div className="detail-card">
-              <h3>Documents</h3>
-              {documents.length ? (
-                <ul className="doc-list">
-                  {documents.map((doc, index) => (
-                    <li key={doc.id || doc.url || index}>
-                      {doc.url ? (
-                        <a href={doc.url} target="_blank" rel="noreferrer">
-                          {doc.title || doc.documentType || doc.url}
-                        </a>
-                      ) : (
-                        <span>{doc.title || doc.documentType || 'Document'}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No documents available.</p>
-              )}
-            </div>
+            {showOcdsDetails && (
+              <div className="detail-card">
+                <h3>Documents</h3>
+                {documents.length ? (
+                  <ul className="doc-list">
+                    {documents.map((doc, index) => (
+                      <li key={doc.id || doc.url || index}>
+                        {doc.url ? (
+                          <a href={doc.url} target="_blank" rel="noreferrer">
+                            {doc.title || doc.documentType || doc.url}
+                          </a>
+                        ) : (
+                          <span>{doc.title || doc.documentType || 'Document'}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No documents available.</p>
+                )}
+              </div>
+            )}
 
-            <div className="detail-card">
-              <h3>Source</h3>
-              {sourceUrl ? (
-                <a href={sourceUrl} target="_blank" rel="noreferrer">
-                  {sourceUrl}
-                </a>
-              ) : (
-                <p>Source link not provided.</p>
-              )}
-            </div>
+            {showOcdsDetails && (
+              <div className="detail-card">
+                <h3>Source</h3>
+                {sourceUrl ? (
+                  <a href={sourceUrl} target="_blank" rel="noreferrer">
+                    {sourceUrl}
+                  </a>
+                ) : (
+                  <p>Source link not provided.</p>
+                )}
+              </div>
+            )}
           </div>
 
           <details className="raw-data">
-            <summary>Show raw OCDS data</summary>
+            <summary>{showOcdsDetails ? 'Show raw OCDS data' : 'Show raw SmartCIG data'}</summary>
             <pre>{JSON.stringify(release, null, 2)}</pre>
           </details>
         </>

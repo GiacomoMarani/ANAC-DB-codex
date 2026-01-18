@@ -2,7 +2,10 @@ import { Link } from 'react-router-dom';
 import { formatCurrency, formatDate } from '../lib/normalize.js';
 
 export default function ResultCard({ item, index }) {
-  const detailPath = item.ocid ? `/contract/${encodeURIComponent(item.ocid)}` : null;
+  const detailId = item.source === 'smartcig' ? item.cig || item.id : item.ocid;
+  const detailPath = detailId
+    ? `/contract/${encodeURIComponent(detailId)}${item.source === 'smartcig' ? '?source=smartcig' : ''}`
+    : null;
   const hasValue = item.value !== null && item.value !== undefined && item.value !== '';
   const content = (
     <>
@@ -17,7 +20,9 @@ export default function ResultCard({ item, index }) {
       <div className="value">
         {hasValue ? formatCurrency(item.value, item.currency || 'EUR') : 'Value n/a'}
       </div>
-      <div className="ocid">OCID: {item.ocid || 'n/a'}</div>
+      <div className="ocid">
+        {item.source === 'smartcig' ? 'Source: SmartCIG' : `OCID: ${item.ocid || 'n/a'}`}
+      </div>
     </>
   );
 

@@ -84,6 +84,7 @@ export default function Results() {
   const handleExport = () => {
     if (!items.length) return;
     const header = [
+      'source',
       'ocid',
       'cig',
       'title',
@@ -95,6 +96,7 @@ export default function Results() {
       'region'
     ];
     const rows = items.map((item) => [
+      item.source || '',
       item.ocid || '',
       item.cig || '',
       item.title || '',
@@ -124,7 +126,7 @@ export default function Results() {
           value={query}
           onChange={setQuery}
           onSubmit={handleSubmit}
-          placeholder="Search by CIG / item ID (e.g. 822799329F)"
+          placeholder="Search by CIG (e.g. 822799329F)"
         />
         <div className="results-actions">
           <button type="button" className="ghost-button" onClick={handleExport}>
@@ -137,7 +139,7 @@ export default function Results() {
         <aside className="filters">
           <div className="cig-help">
             <h3>Search by CIG</h3>
-            <p>Enter the CIG (item ID) to retrieve the releases linked to that tender.</p>
+            <p>Enter the CIG to retrieve the related contract data.</p>
             <div className="example-list">
               <button type="button" className="example-chip" onClick={() => handleSubmit('822799329F')}>
                 822799329F

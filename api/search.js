@@ -1,13 +1,46 @@
 export default async function handler(req, res) {
+  const cig = getCigFromQuery(req.query);
+  if (!cig) {
+    return sendJson(res, 400, { error: 'Missing CIG parameter' });
+  }
+
+  const smartCigUrlTemplate = process.env.ANAC_SMARTCIG_URL;
+  if (smartCigUrlTemplate) {
+    try {
+      const smartCigUrl = buildSmartCigUrl(smartCigUrlTemplate, cig);
+      if (isDebug(req.query)) {
+        res.setHeader('x-upstream-url', smartCigUrl.toString());
+      }
+
+      const smartResponse = await fetch(smartCigUrl.toString(), {
+        headers: upstreamHeaders()
+      });
+      const smartText = await smartResponse.text();
+      if (!smartResponse.ok) {
+        return sendJson(res, smartResponse.status, {
+          error: 'Upstream request failed',
+          detail: clipText(smartText)
+        });
+      }
+
+      const smartJson = safeJson(smartText);
+      if (!smartJson) {
+        return sendJson(res, 502, {
+          error: 'Upstream returned non-JSON',
+          detail: clipText(smartText)
+        });
+      }
+
+      return sendJson(res, 200, smartJson);
+    } catch (err) {
+      return sendJson(res, 502, { error: 'Upstream request failed', detail: String(err) });
+    }
+  }
+
   const awardsUrlTemplate = process.env.ANAC_AWARDS_TENDER_URL || process.env.ANAC_SEARCH_URL;
   const releasesByAwardUrl = process.env.ANAC_RELEASES_AWARD_URL;
   if (!awardsUrlTemplate) {
     return sendJson(res, 500, { error: 'ANAC_AWARDS_TENDER_URL not configured' });
-  }
-
-  const cig = getCigFromQuery(req.query);
-  if (!cig) {
-    return sendJson(res, 400, { error: 'Missing CIG parameter' });
   }
 
   try {
@@ -29,7 +62,10 @@ export default async function handler(req, res) {
 
     const awardsJson = safeJson(awardsText);
     if (!awardsJson) {
-      return sendJson(res, 502, { error: 'Upstream returned non-JSON', detail: clipText(awardsText) });
+      return sendJson(res, 502, {
+        error: 'Upstream returned non-JSON',
+        detail: clipText(awardsText)
+      });
     }
 
     const awards = normalizeArray(awardsJson);
@@ -131,6 +167,18 @@ function buildReleaseUrl(template, awardId) {
   return url;
 }
 
+function buildSmartCigUrl(template, cig) {
+  if (template.includes('{cig}')) {
+    return new URL(template.replace('{cig}', encodeURIComponent(cig)));
+  }
+  if (template.includes('{id}')) {
+    return new URL(template.replace('{id}', encodeURIComponent(cig)));
+  }
+  const url = new URL(template);
+  url.searchParams.set('cig', cig);
+  return url;
+}
+
 function upstreamHeaders() {
   return {
     accept: 'application/json',
@@ -161,5 +209,5 @@ function normalizeArray(payload) {
 function clipText(text) {
   if (!text) return '';
   const trimmed = String(text);
-  return trimmed.length > 500 ? `${trimmed.slice(0, 500)}…` : trimmed;
+  return trimmed.length > 500 ? `${trimmed.slice(0, 500)}...` : trimmed;
 }
