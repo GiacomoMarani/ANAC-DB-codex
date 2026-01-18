@@ -1,27 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import SearchBar from '../components/SearchBar.jsx';
-import Filters from '../components/Filters.jsx';
 import ResultCard from '../components/ResultCard.jsx';
 import { extractItems, normalizeItem, formatCurrency } from '../lib/normalize.js';
 import { getApiBase } from '../lib/api.js';
+import { normalizeCigInput } from '../lib/cig.js';
 
 export default function Results() {
   const apiBase = getApiBase();
   const [searchParams, setSearchParams] = useSearchParams();
-  const q = searchParams.get('q') || '';
-  const [query, setQuery] = useState(q);
+  const cigParam = searchParams.get('cig') || searchParams.get('q') || '';
+  const [query, setQuery] = useState(cigParam);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const hasParams = Array.from(searchParams.keys()).length > 0;
+  const hasCig = Boolean(cigParam);
 
   useEffect(() => {
-    setQuery(q);
-  }, [q]);
+    setQuery(cigParam);
+  }, [cigParam]);
 
   useEffect(() => {
-    if (!hasParams) return;
+    if (!hasCig) return;
 
     let isActive = true;
     setLoading(true);
@@ -52,7 +52,7 @@ export default function Results() {
     return () => {
       isActive = false;
     };
-  }, [searchParams]);
+  }, [apiBase, searchParams, hasCig]);
 
   const items = useMemo(() => extractItems(data).map(normalizeItem), [data]);
 
@@ -73,41 +73,30 @@ export default function Results() {
   const totalFromApi =
     data?.total || data?.count || data?.records?.length || data?.releases?.length;
 
-  const updateParams = (updates) => {
-    const next = new URLSearchParams(searchParams);
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value === undefined || value === null || value === '') {
-        next.delete(key);
-      } else {
-        next.set(key, String(value));
-      }
-    });
-    setSearchParams(next, { replace: true });
-  };
-
   const handleSubmit = (value) => {
-    const next = value.trim();
+    const next = normalizeCigInput(value);
     if (!next) return;
-    updateParams({ q: next, page: '1' });
-  };
-
-  const handleApplyFilters = (filters) => {
-    updateParams({ ...filters, page: '1' });
-  };
-
-  const handleResetFilters = () => {
-    const next = new URLSearchParams();
-    if (q) {
-      next.set('q', q);
-    }
-    setSearchParams(next, { replace: true });
+    const nextParams = new URLSearchParams();
+    nextParams.set('cig', next);
+    setSearchParams(nextParams, { replace: true });
   };
 
   const handleExport = () => {
     if (!items.length) return;
-    const header = ['ocid', 'title', 'authority', 'contractor', 'value', 'currency', 'date', 'region'];
+    const header = [
+      'ocid',
+      'cig',
+      'title',
+      'authority',
+      'contractor',
+      'value',
+      'currency',
+      'date',
+      'region'
+    ];
     const rows = items.map((item) => [
       item.ocid || '',
+      item.cig || '',
       item.title || '',
       item.authority || '',
       item.contractor || '',
@@ -128,21 +117,6 @@ export default function Results() {
     URL.revokeObjectURL(url);
   };
 
-  const currentFilters = useMemo(
-    () => ({
-      authority: searchParams.get('authority') || '',
-      contractor: searchParams.get('contractor') || '',
-      amount_min: searchParams.get('amount_min') || '',
-      amount_max: searchParams.get('amount_max') || '',
-      date_from: searchParams.get('date_from') || '',
-      date_to: searchParams.get('date_to') || '',
-      region: searchParams.get('region') || '',
-      contract_type: searchParams.get('contract_type') || '',
-      cpv: searchParams.get('cpv') || ''
-    }),
-    [searchParams]
-  );
-
   return (
     <section className="results-page">
       <div className="results-top">
@@ -150,7 +124,7 @@ export default function Results() {
           value={query}
           onChange={setQuery}
           onSubmit={handleSubmit}
-          placeholder="Search contracts, authorities, contractors, CPV, CIG"
+          placeholder="Search by CIG (e.g. 822799329F)"
         />
         <div className="results-actions">
           <button type="button" className="ghost-button" onClick={handleExport}>
@@ -161,7 +135,21 @@ export default function Results() {
 
       <div className="results-layout">
         <aside className="filters">
-          <Filters values={currentFilters} onApply={handleApplyFilters} onReset={handleResetFilters} />
+          <div className="cig-help">
+            <h3>Search by CIG</h3>
+            <p>
+              The ANAC API exposes releases by tender ID. Enter a CIG to retrieve all related
+              releases.
+            </p>
+            <div className="example-list">
+              <button type="button" className="example-chip" onClick={() => handleSubmit('822799329F')}>
+                822799329F
+              </button>
+              <button type="button" className="example-chip" onClick={() => handleSubmit('7701655')}>
+                7701655
+              </button>
+            </div>
+          </div>
         </aside>
 
         <div className="results-content">
@@ -191,17 +179,17 @@ export default function Results() {
 
           {loading && <div className="loading">Loading results...</div>}
           {error && <div className="error">Error: {error}</div>}
-          {!hasParams && (
+          {!hasCig && (
             <div className="empty-state">
-              <h3>Start with a search</h3>
-              <p>Type a keyword, authority, contractor, CPV, or CIG to begin.</p>
+              <h3>Insert a CIG to start</h3>
+              <p>Use the search bar to look up releases for a specific tender.</p>
             </div>
           )}
 
-          {hasParams && !loading && !error && !items.length && (
+          {hasCig && !loading && !error && !items.length && (
             <div className="empty-state">
               <h3>No results yet</h3>
-              <p>Try a different query or remove some filters.</p>
+              <p>Check the CIG value and try again.</p>
             </div>
           )}
 

@@ -31,8 +31,24 @@ export default async function handler(req, res) {
 }
 
 function applyQuery(url, query) {
+  let cig = null;
+  let hasId = false;
+
   Object.entries(query || {}).forEach(([key, value]) => {
     if (key === 'debug') return;
+    if (key === 'cig' || key === 'q') {
+      const rawValue = pickFirstValue(value);
+      cig = rawValue ? normalizeCigValue(rawValue) : null;
+      return;
+    }
+    if (key === 'id') {
+      const idValue = pickFirstValue(value);
+      if (idValue) {
+        url.searchParams.set('id', idValue);
+        hasId = true;
+      }
+      return;
+    }
     if (value === undefined || value === null || value === '') return;
     if (Array.isArray(value)) {
       value.forEach((entry) => {
@@ -44,12 +60,28 @@ function applyQuery(url, query) {
     }
     url.searchParams.set(key, String(value));
   });
+
+  if (!hasId && cig) {
+    url.searchParams.set('id', cig);
+  }
 }
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('content-type', 'application/json');
   res.end(JSON.stringify(payload));
+}
+
+function pickFirstValue(value) {
+  if (Array.isArray(value)) {
+    return value.find((entry) => entry !== undefined && entry !== null && entry !== '');
+  }
+  if (value === undefined || value === null || value === '') return null;
+  return String(value);
+}
+
+function normalizeCigValue(value) {
+  return String(value).trim().replace(/^CIG\s*/i, '').replace(/\s+/g, '');
 }
 
 function isDebug(query) {

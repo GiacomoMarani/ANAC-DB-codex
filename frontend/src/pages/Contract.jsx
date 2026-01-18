@@ -74,6 +74,7 @@ export default function Contract() {
               <h1>{summary?.title || 'Contract detail'}</h1>
               <div className="meta">
                 <span>OCID: {summary?.ocid || ocid}</span>
+                <span>{summary?.cig ? `CIG: ${summary.cig}` : 'CIG n/a'}</span>
                 <span>{summary?.date ? formatDate(summary.date) : 'Date n/a'}</span>
                 <span>{summary?.authority || 'Authority n/a'}</span>
               </div>
@@ -89,6 +90,10 @@ export default function Contract() {
             <div className="detail-card">
               <h3>Overview</h3>
               <dl className="detail-list">
+                <div>
+                  <dt>CIG</dt>
+                  <dd>{summary?.cig || 'n/a'}</dd>
+                </div>
                 <div>
                   <dt>Authority</dt>
                   <dd>{summary?.authority || 'n/a'}</dd>

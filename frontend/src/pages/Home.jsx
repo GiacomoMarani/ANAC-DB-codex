@@ -1,31 +1,32 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SearchBar from '../components/SearchBar.jsx';
+import { normalizeCigInput } from '../lib/cig.js';
 
-const examples = ['CIG 1234', 'Comune di Roma', 'CPV 45210000', 'servizi sociali'];
+const examples = ['822799329F', '7701655'];
 
 export default function Home() {
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
 
   const handleSubmit = (value) => {
-    const next = value.trim();
+    const next = normalizeCigInput(value);
     if (!next) return;
-    navigate(`/search?q=${encodeURIComponent(next)}`);
+    navigate(`/search?cig=${encodeURIComponent(next)}`);
   };
 
   return (
     <section className="home">
       <div className="hero">
         <div className="hero-text">
-          <h1>Find public contracts fast</h1>
-          <p>Search ANAC contract data by authority, contractor, CPV, CIG, or keyword.</p>
+          <h1>Find contracts by CIG</h1>
+          <p>Insert a CIG (tender ID) to retrieve all related releases from ANAC.</p>
         </div>
         <SearchBar
           value={query}
           onChange={setQuery}
           onSubmit={handleSubmit}
-          placeholder="Search contracts, authorities, contractors, CPV, CIG"
+          placeholder="Enter a CIG (e.g. 822799329F)"
           autoFocus
         />
         <div className="examples">
@@ -46,16 +47,16 @@ export default function Home() {
       </div>
       <div className="quick-paths">
         <div className="quick-card">
-          <h3>Browse by Region</h3>
-          <p>Jump into geographic views to spot activity near you.</p>
+          <h3>Search by CIG</h3>
+          <p>Paste a CIG code to view all releases for that tender.</p>
         </div>
         <div className="quick-card">
-          <h3>Browse by Authority</h3>
-          <p>See the latest contracts published by each authority.</p>
+          <h3>Open release detail</h3>
+          <p>Explore OCDS fields in a clear, human-readable layout.</p>
         </div>
         <div className="quick-card">
-          <h3>Explore Trends</h3>
-          <p>Visualize changes in value and volume over time.</p>
+          <h3>Export results</h3>
+          <p>Download the releases as CSV for deeper analysis.</p>
         </div>
       </div>
     </section>

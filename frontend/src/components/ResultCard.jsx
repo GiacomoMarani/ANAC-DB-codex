@@ -8,6 +8,7 @@ export default function ResultCard({ item, index }) {
     <>
       <h3>{item.title || 'Untitled contract'}</h3>
       <div className="meta">
+        {item.cig ? <span>CIG: {item.cig}</span> : null}
         <span>{item.authority || 'Unknown authority'}</span>
         <span>{item.contractor || 'Unknown contractor'}</span>
         <span>{item.date ? formatDate(item.date) : 'Date n/a'}</span>

@@ -35,6 +35,14 @@ export function normalizeItem(item) {
     id ||
     'Untitled contract';
 
+  const cig =
+    release.tender?.id ||
+    release.tender?.items?.[0]?.id ||
+    release.tender?.items?.[0]?.relatedLot ||
+    release.awards?.[0]?.relatedLot ||
+    release.awards?.[0]?.relatedLots?.[0] ||
+    '';
+
   const authority =
     release.buyer?.name ||
     release.tender?.procuringEntity?.name ||
@@ -53,6 +61,7 @@ export function normalizeItem(item) {
   return {
     id,
     ocid,
+    cig,
     title,
     authority,
     contractor,
