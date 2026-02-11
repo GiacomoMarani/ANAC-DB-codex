@@ -193,9 +193,9 @@ export default function ImportPage() {
                 {result.errorMessages.length > 0 && (
                   <div className="p-4 bg-muted rounded-lg">
                     <p className="font-medium text-sm mb-2">Primi errori riscontrati:</p>
-                    <ul className="text-xs text-muted-foreground space-y-1">
+                    <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-1">
                       {result.errorMessages.map((msg, i) => (
-                        <li key={i}>• {msg}</li>
+                        <li key={i}>{msg}</li>
                       ))}
                     </ul>
                   </div>
@@ -227,3 +227,4 @@ export default function ImportPage() {
     </div>
   )
 }
+

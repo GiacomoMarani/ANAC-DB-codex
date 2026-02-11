@@ -1,5 +1,5 @@
 -- ANAC CIG Database Schema
--- Schema for storing public procurement data from ANAC (Autorità Nazionale Anticorruzione)
+-- Schema for storing public procurement data from ANAC (Autorita Nazionale Anticorruzione)
 
 -- Main table for CIG (Codice Identificativo Gara) records
 CREATE TABLE IF NOT EXISTS cig (
@@ -166,3 +166,4 @@ COMMENT ON COLUMN cig.oggetto_gara IS 'Descrizione dell''oggetto della gara';
 COMMENT ON COLUMN cig.importo_complessivo_gara IS 'Importo complessivo della gara in EUR';
 COMMENT ON COLUMN cig.cod_cpv IS 'Codice CPV (Common Procurement Vocabulary)';
 COMMENT ON COLUMN cig.flag_pnrr_pnc IS 'Flag PNRR/PNC (Piano Nazionale Ripresa e Resilienza)';
+

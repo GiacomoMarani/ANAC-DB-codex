@@ -45,11 +45,19 @@ function formatCurrency(value: number | null | undefined): string {
 
 function formatDate(dateString: string | null | undefined): string {
   if (!dateString) return "-"
-  return new Date(dateString).toLocaleDateString("it-IT", {
+  const parts = dateString.split("-")
+  const options: Intl.DateTimeFormatOptions = {
     day: "2-digit",
     month: "long",
     year: "numeric",
-  })
+  }
+  if (parts.length === 3) {
+    const [year, month, day] = parts.map((value) => Number.parseInt(value, 10))
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+      return new Date(year, month - 1, day).toLocaleDateString("it-IT", options)
+    }
+  }
+  return new Date(dateString).toLocaleDateString("it-IT", options)
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -105,8 +113,6 @@ export function CigDetailDialog({ cig, open, onOpenChange }: CigDetailDialogProp
             </dl>
           </div>
 
-          <Separator />
-
           {cig.esito && (
             <>
               <Separator />
@@ -115,9 +121,6 @@ export function CigDetailDialog({ cig, open, onOpenChange }: CigDetailDialogProp
                 <Badge variant={cig.esito === "AGGIUDICATA" ? "default" : "secondary"}>
                   {cig.esito}
                 </Badge>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Comunicato il {formatDate(cig.data_comunicazione_esito)}
-                </p>
               </div>
             </>
           )}

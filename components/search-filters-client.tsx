@@ -72,7 +72,7 @@ export function SearchFilters({
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Cerca per CIG, oggetto gara o ente appaltante..."
+              placeholder="Cerca per CIG o oggetto gara..."
               value={currentFilters.q || ""}
               onChange={(e) => onSearchChange(e.target.value)}
               className="pl-10"

@@ -26,6 +26,7 @@ interface CigData {
     provincia: string | null
     data_pubblicazione: string | null
     data_scadenza_offerta: string | null
+    sezione_regionale: string | null
     oggetto_principale_contratto: string | null
     descrizione_cpv: string | null
     esito: string | null

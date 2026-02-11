@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { NextResponse } from "next/server"
 
 interface CigRecord {
@@ -26,7 +26,7 @@ const FIELD_LIMITS: Record<string, number> = {
   data_pubblicazione: 50,
   data_scadenza_offerta: 50,
   sezione_regionale: 100,
-  descrizione_cpv: 2000,
+  descrizione_cpv: 1000,
   esito: 100,
 }
 
@@ -39,6 +39,17 @@ function truncateString(value: string | null | undefined, fieldName: string): st
   return value
 }
 
+function parseImporto(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null
+  if (typeof value === "number") return Number.isFinite(value) ? value : null
+  if (typeof value === "string") {
+    const cleaned = value.replace(/\s+/g, "").replace(",", ".")
+    const parsed = Number(cleaned)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
 function normalizeRecord(record: CigRecord) {
   // Normalize field names (handle both lowercase and uppercase)
   const normalized: Record<string, unknown> = {}
@@ -48,10 +59,22 @@ function normalizeRecord(record: CigRecord) {
     normalized[lowerKey] = value
   }
 
+  const rawCig = normalized.cig
+  const cigValue =
+    typeof rawCig === "string"
+      ? rawCig.trim()
+      : rawCig !== null && rawCig !== undefined
+        ? String(rawCig).trim()
+        : ""
+
+  if (!cigValue) {
+    throw new Error("CIG mancante")
+  }
+
   return {
-    cig: (normalized.cig as string).substring(0, 50),
+    cig: cigValue.substring(0, 50),
     oggetto_gara: truncateString(normalized.oggetto_gara as string, "oggetto_gara"),
-    importo_lotto: normalized.importo_lotto || null,
+    importo_lotto: parseImporto(normalized.importo_lotto),
     oggetto_principale_contratto: truncateString(normalized.oggetto_principale_contratto as string, "oggetto_principale_contratto"),
     stato: truncateString(normalized.stato as string, "stato"),
     provincia: truncateString(normalized.provincia as string, "provincia"),
@@ -71,7 +94,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nessun record da importare" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    let supabase
+    try {
+      supabase = createAdminClient()
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Supabase admin client non configurato" },
+        { status: 500 }
+      )
+    }
     
     let imported = 0
     let errors = 0
@@ -79,17 +110,22 @@ export async function POST(request: Request) {
 
     // Normalize and prepare records for upsert
     const normalizedRecords = records
-      .filter((r: CigRecord) => r.cig)
       .map((r: CigRecord) => {
         try {
           return normalizeRecord(r)
         } catch (err) {
           errors++
-          errorMessages.push(`Errore nel record ${r.cig}: ${err instanceof Error ? err.message : "errore sconosciuto"}`)
+          const recordAny = r as Record<string, unknown>
+          const cigFallback = recordAny.cig ?? recordAny.CIG
+          errorMessages.push(
+            `Errore nel record ${cigFallback ? String(cigFallback) : "sconosciuto"}: ${
+              err instanceof Error ? err.message : "errore sconosciuto"
+            }`
+          )
           return null
         }
       })
-      .filter(Boolean)
+      .filter((record): record is ReturnType<typeof normalizeRecord> => Boolean(record))
 
     // Deduplicate records by CIG (keep the last occurrence)
     const deduplicatedRecords = Array.from(

@@ -49,6 +49,13 @@ function formatCurrency(value: number | null): string {
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "-"
+  const parts = dateString.split("-")
+  if (parts.length === 3) {
+    const [year, month, day] = parts.map((value) => Number.parseInt(value, 10))
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+      return new Date(year, month - 1, day).toLocaleDateString("it-IT")
+    }
+  }
   return new Date(dateString).toLocaleDateString("it-IT")
 }
 

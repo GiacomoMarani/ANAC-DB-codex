@@ -13,8 +13,7 @@ CREATE TABLE cig (
   data_scadenza_offerta DATE,
   sezione_regionale VARCHAR(100),
   descrizione_cpv VARCHAR(1000),
-  esito VARCHAR(100),
-  created_at TIMESTAMP DEFAULT NOW()
+  esito VARCHAR(100)
 );
 
 -- Create indexes for common queries
@@ -32,13 +31,16 @@ CREATE POLICY "Allow public read access"
   FOR SELECT
   USING (true);
 
--- Policy: Allow insert/update (for import)
-CREATE POLICY "Allow insert and update"
+-- Policy: Allow insert/update for authenticated users (admin/service role can bypass RLS)
+CREATE POLICY "Allow insert"
   ON cig
   FOR INSERT
+  TO authenticated
   WITH CHECK (true);
 
 CREATE POLICY "Allow update"
   ON cig
   FOR UPDATE
-  USING (true);
+  TO authenticated
+  USING (true)
+  WITH CHECK (true);

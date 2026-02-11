@@ -1,6 +1,24 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
+function parseAmount(value: string): number | null {
+  if (!value) return null
+  const cleaned = value.replace(/\s+/g, "").replace(",", ".")
+  const parsed = Number(cleaned)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseImporto(value: unknown): number {
+  if (value === null || value === undefined) return 0
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0
+  if (typeof value === "string") {
+    const cleaned = value.replace(/\s+/g, "").replace(",", ".")
+    const parsed = Number(cleaned)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   
@@ -29,6 +47,7 @@ export async function GET(request: NextRequest) {
       provincia,
       data_pubblicazione,
       data_scadenza_offerta,
+      sezione_regionale,
       oggetto_principale_contratto,
       descrizione_cpv,
       esito
@@ -54,12 +73,27 @@ export async function GET(request: NextRequest) {
     query = query.eq("oggetto_principale_contratto", tipo_contratto)
   }
 
+  if (anno) {
+    const year = Number.parseInt(anno, 10)
+    if (Number.isFinite(year)) {
+      query = query
+        .gte("data_pubblicazione", `${year}-01-01`)
+        .lte("data_pubblicazione", `${year}-12-31`)
+    }
+  }
+
   if (importo_min) {
-    query = query.gte("importo_lotto", Number(importo_min))
+    const minValue = parseAmount(importo_min)
+    if (minValue !== null) {
+      query = query.gte("importo_lotto", minValue)
+    }
   }
 
   if (importo_max) {
-    query = query.lte("importo_lotto", Number(importo_max))
+    const maxValue = parseAmount(importo_max)
+    if (maxValue !== null) {
+      query = query.lte("importo_lotto", maxValue)
+    }
   }
 
   const { data, count, error } = await query
@@ -69,7 +103,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Calculate page totals from current data
-  const pageImporto = (data || []).reduce((sum, item) => sum + (item.importo_lotto || 0), 0)
+  const pageImporto = (data || []).reduce((sum, item) => sum + parseImporto(item.importo_lotto), 0)
 
   return NextResponse.json({
     data: data || [],

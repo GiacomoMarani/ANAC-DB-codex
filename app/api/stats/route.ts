@@ -12,11 +12,21 @@ export async function GET() {
   ])
 
   // Extract years from dates
+  const getYear = (value: string) => {
+    const parts = value.split("-")
+    if (parts.length === 3) {
+      const year = Number.parseInt(parts[0], 10)
+      return Number.isFinite(year) ? year : null
+    }
+    const parsed = new Date(value)
+    return Number.isFinite(parsed.getTime()) ? parsed.getFullYear() : null
+  }
+
   const anni = [...new Set(
     anniResult.data
-      ?.map((r: any) => {
+      ?.map((r: { data_pubblicazione?: string | null }) => {
         if (r.data_pubblicazione) {
-          return new Date(r.data_pubblicazione).getFullYear()
+          return getYear(r.data_pubblicazione)
         }
         return null
       })
