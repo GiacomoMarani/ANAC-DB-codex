@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
   const stato = searchParams.get("stato") || ""
   const tipo_contratto = searchParams.get("tipo_contratto") || ""
   const anno = searchParams.get("anno") || ""
+  const cpv = searchParams.get("cpv") || ""
   const importo_min = searchParams.get("importo_min") || ""
   const importo_max = searchParams.get("importo_max") || ""
   const page = Number(searchParams.get("page")) || 1
@@ -58,7 +59,9 @@ export async function GET(request: NextRequest) {
   // Apply filters
   if (q) {
     const searchTerm = `%${q}%`
-    query = query.or(`cig.ilike.${searchTerm},oggetto_gara.ilike.${searchTerm}`)
+    query = query.or(
+      `cig.ilike.${searchTerm},oggetto_gara.ilike.${searchTerm},descrizione_cpv.ilike.${searchTerm}`
+    )
   }
 
   if (provincia) {
@@ -71,6 +74,10 @@ export async function GET(request: NextRequest) {
 
   if (tipo_contratto) {
     query = query.eq("oggetto_principale_contratto", tipo_contratto)
+  }
+
+  if (cpv) {
+    query = query.ilike("descrizione_cpv", `%${cpv}%`)
   }
 
   if (anno) {

@@ -57,6 +57,7 @@ export function CigDataProvider() {
     const stato = searchParams.get("stato")
     const tipo_contratto = searchParams.get("tipo_contratto")
     const anno = searchParams.get("anno")
+    const cpv = searchParams.get("cpv")
     const importo_min = searchParams.get("importo_min")
     const importo_max = searchParams.get("importo_max")
     const page = searchParams.get("page")
@@ -65,6 +66,7 @@ export function CigDataProvider() {
     if (stato) params.set("stato", stato)
     if (tipo_contratto) params.set("tipo_contratto", tipo_contratto)
     if (anno) params.set("anno", anno)
+    if (cpv) params.set("cpv", cpv)
     if (importo_min) params.set("importo_min", importo_min)
     if (importo_max) params.set("importo_max", importo_max)
     if (page) params.set("page", page)
@@ -148,6 +150,7 @@ export function CigDataProvider() {
     stato: searchParams.get("stato") || undefined,
     tipo_contratto: searchParams.get("tipo_contratto") || undefined,
     anno: searchParams.get("anno") || undefined,
+    cpv: searchParams.get("cpv") || undefined,
     importo_min: searchParams.get("importo_min") || undefined,
     importo_max: searchParams.get("importo_max") || undefined,
   }), [searchParams, localSearch])

@@ -24,6 +24,7 @@ interface SearchFiltersProps {
     stato?: string
     tipo_contratto?: string
     anno?: string
+    cpv?: string
     importo_min?: string
     importo_max?: string
   }
@@ -47,7 +48,12 @@ export function SearchFilters({
   isPending 
 }: SearchFiltersProps) {
   const [showAdvanced, setShowAdvanced] = useState(
-    Boolean(currentFilters.importo_min || currentFilters.importo_max || currentFilters.tipo_contratto)
+    Boolean(
+      currentFilters.importo_min ||
+        currentFilters.importo_max ||
+        currentFilters.tipo_contratto ||
+        currentFilters.cpv
+    )
   )
 
   const handleSearch = (e: React.FormEvent) => {
@@ -61,6 +67,7 @@ export function SearchFilters({
     currentFilters.stato ||
     currentFilters.tipo_contratto ||
     currentFilters.anno ||
+    currentFilters.cpv ||
     currentFilters.importo_min ||
     currentFilters.importo_max
   )
@@ -178,6 +185,16 @@ export function SearchFilters({
                 ))}
               </SelectContent>
             </Select>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">CPV:</span>
+              <Input
+                placeholder="Codice o descrizione"
+                value={currentFilters.cpv || ""}
+                onChange={(e) => onFilterChange({ cpv: e.target.value || undefined })}
+                className="w-[220px]"
+              />
+            </div>
 
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Importo:</span>

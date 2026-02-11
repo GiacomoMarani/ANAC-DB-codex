@@ -27,6 +27,7 @@ interface SearchFiltersProps {
     stato?: string
     tipo_contratto?: string
     anno?: string
+    cpv?: string
     importo_min?: string
     importo_max?: string
   }
@@ -40,7 +41,12 @@ export function SearchFilters({ filterOptions, currentFilters }: SearchFiltersPr
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
   const [showAdvanced, setShowAdvanced] = useState(
-    Boolean(currentFilters.importo_min || currentFilters.importo_max || currentFilters.tipo_contratto)
+    Boolean(
+      currentFilters.importo_min ||
+        currentFilters.importo_max ||
+        currentFilters.tipo_contratto ||
+        currentFilters.cpv
+    )
   )
 
   const [localSearch, setLocalSearch] = useState(currentFilters.q || "")
@@ -85,6 +91,7 @@ export function SearchFilters({ filterOptions, currentFilters }: SearchFiltersPr
     currentFilters.stato ||
     currentFilters.tipo_contratto ||
     currentFilters.anno ||
+    currentFilters.cpv ||
     currentFilters.importo_min ||
     currentFilters.importo_max
   )
@@ -195,6 +202,16 @@ export function SearchFilters({ filterOptions, currentFilters }: SearchFiltersPr
                 ))}
               </SelectContent>
             </Select>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">CPV:</span>
+              <Input
+                placeholder="Codice o descrizione"
+                value={currentFilters.cpv || ""}
+                onChange={(e) => updateFilters({ cpv: e.target.value || undefined })}
+                className="w-[220px]"
+              />
+            </div>
 
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Importo:</span>
