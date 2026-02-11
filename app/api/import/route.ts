@@ -115,8 +115,8 @@ export async function POST(request: Request) {
           return normalizeRecord(r)
         } catch (err) {
           errors++
-          const recordAny = r as Record<string, unknown>
-          const cigFallback = recordAny.cig ?? recordAny.CIG
+          const upperCig = (r as unknown as { CIG?: unknown }).CIG
+          const cigFallback = (r as { cig?: unknown }).cig ?? upperCig
           errorMessages.push(
             `Errore nel record ${cigFallback ? String(cigFallback) : "sconosciuto"}: ${
               err instanceof Error ? err.message : "errore sconosciuto"
