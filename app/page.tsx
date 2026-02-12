@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { CigDataProvider } from "@/components/cig-data-provider"
 import { Button } from "@/components/ui/button"
-import { Upload, Database } from "lucide-react"
+import { Upload } from "lucide-react"
 import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -13,7 +13,12 @@ export default function HomePage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="flex items-center gap-3">
-                <Database className="h-8 w-8 text-primary" />
+                <img
+                  src="/logo.jpg"
+                  alt="Tender AI PRO"
+                  className="h-10 w-10 rounded-sm object-contain"
+                  loading="eager"
+                />
                 <h1 className="text-2xl font-bold tracking-tight">ANAC Data Explorer</h1>
               </div>
               <p className="text-muted-foreground mt-1">
