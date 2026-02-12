@@ -5,10 +5,11 @@ export async function GET() {
   const supabase = await createClient()
 
   // Use parallel queries for stats - these are simple counts that use indexes
-  const [totalResult, activeResult, anniResult] = await Promise.all([
+  const [totalResult, activeResult, anniResult, cpvResult] = await Promise.all([
     supabase.from("cig").select("*", { count: "exact", head: true }),
     supabase.from("cig").select("*", { count: "exact", head: true }).eq("stato", "ATTIVO"),
     supabase.from("cig").select("data_pubblicazione").not("data_pubblicazione", "is", null).order("data_pubblicazione", { ascending: false }).limit(500),
+    supabase.from("cig").select("descrizione_cpv").not("descrizione_cpv", "is", null).order("descrizione_cpv", { ascending: true }).limit(1000),
   ])
 
   // Extract years from dates
@@ -33,9 +34,18 @@ export async function GET() {
       .filter((year: number | null): year is number => year !== null)
   )].sort((a, b) => b - a)
 
+  const cpv = [
+    ...new Set(
+      cpvResult.data
+        ?.map((r: { descrizione_cpv?: string | null }) => r.descrizione_cpv?.trim() || null)
+        .filter((value: string | null): value is string => Boolean(value))
+    ),
+  ]
+
   return NextResponse.json({
     total: totalResult.count || 0,
     active: activeResult.count || 0,
     anni,
+    cpv,
   })
 }

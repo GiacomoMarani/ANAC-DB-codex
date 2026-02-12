@@ -20,6 +20,7 @@ interface SearchFiltersProps {
   filterOptions: {
     province: string[]
     anni: number[]
+    cpv: string[]
   }
   currentFilters: {
     q?: string
@@ -44,8 +45,7 @@ export function SearchFilters({ filterOptions, currentFilters }: SearchFiltersPr
     Boolean(
       currentFilters.importo_min ||
         currentFilters.importo_max ||
-        currentFilters.tipo_contratto ||
-        currentFilters.cpv
+        currentFilters.tipo_contratto
     )
   )
 
@@ -166,6 +166,23 @@ export function SearchFilters({ filterOptions, currentFilters }: SearchFiltersPr
             </SelectContent>
           </Select>
 
+          <Select
+            value={currentFilters.cpv || "all"}
+            onValueChange={(value) => updateFilters({ cpv: value === "all" ? undefined : value })}
+          >
+            <SelectTrigger className="w-[240px]">
+              <SelectValue placeholder="CPV" />
+            </SelectTrigger>
+            <SelectContent className="max-h-[300px] overflow-y-auto">
+              <SelectItem value="all">Tutti i CPV</SelectItem>
+              {filterOptions.cpv.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {item}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Button
             variant="outline"
             size="sm"
@@ -202,16 +219,6 @@ export function SearchFilters({ filterOptions, currentFilters }: SearchFiltersPr
                 ))}
               </SelectContent>
             </Select>
-
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">CPV:</span>
-              <Input
-                placeholder="Codice o descrizione"
-                value={currentFilters.cpv || ""}
-                onChange={(e) => updateFilters({ cpv: e.target.value || undefined })}
-                className="w-[220px]"
-              />
-            </div>
 
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Importo:</span>

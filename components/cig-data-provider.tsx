@@ -14,6 +14,7 @@ interface Stats {
   total: number
   active: number
   anni: number[]
+  cpv: string[]
 }
 
 interface CigData {
@@ -141,8 +142,9 @@ export function CigDataProvider() {
       "TRAPANI", "TRENTO", "TREVISO", "TRIESTE", "UDINE", "VARESE", "VENEZIA",
       "VERBANO-CUSIO-OSSOLA", "VERCELLI", "VERONA", "VIBO VALENTIA", "VICENZA", "VITERBO"
     ],
-    anni: stats?.anni || []
-  }), [stats?.anni])
+    anni: stats?.anni || [],
+    cpv: stats?.cpv || [],
+  }), [stats?.anni, stats?.cpv])
 
   const currentFilters = useMemo(() => ({
     q: localSearch,
