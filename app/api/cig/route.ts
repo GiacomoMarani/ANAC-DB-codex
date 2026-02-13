@@ -19,6 +19,23 @@ function parseImporto(value: unknown): number {
   return 0
 }
 
+function getTodayDateString(timeZone = "Europe/Rome"): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+  const parts = formatter.formatToParts(new Date())
+  const year = parts.find((p) => p.type === "year")?.value
+  const month = parts.find((p) => p.type === "month")?.value
+  const day = parts.find((p) => p.type === "day")?.value
+  if (year && month && day) {
+    return `${year}-${month}-${day}`
+  }
+  return new Date().toISOString().slice(0, 10)
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   
@@ -30,6 +47,7 @@ export async function GET(request: NextRequest) {
   const cpv = searchParams.get("cpv") || ""
   const importo_min = searchParams.get("importo_min") || ""
   const importo_max = searchParams.get("importo_max") || ""
+  const non_scadute = searchParams.get("non_scadute") || ""
   const page = Number(searchParams.get("page")) || 1
   const pageSize = 20
   const offset = (page - 1) * pageSize
@@ -78,6 +96,11 @@ export async function GET(request: NextRequest) {
 
   if (cpv) {
     query = query.ilike("descrizione_cpv", `%${cpv}%`)
+  }
+
+  if (non_scadute === "true") {
+    const today = getTodayDateString()
+    query = query.gte("data_scadenza_offerta", today)
   }
 
   if (anno) {

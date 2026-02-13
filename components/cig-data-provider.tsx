@@ -61,6 +61,7 @@ export function CigDataProvider() {
     const cpv = searchParams.get("cpv")
     const importo_min = searchParams.get("importo_min")
     const importo_max = searchParams.get("importo_max")
+    const non_scadute = searchParams.get("non_scadute")
     const page = searchParams.get("page")
     
     if (provincia) params.set("provincia", provincia)
@@ -70,6 +71,7 @@ export function CigDataProvider() {
     if (cpv) params.set("cpv", cpv)
     if (importo_min) params.set("importo_min", importo_min)
     if (importo_max) params.set("importo_max", importo_max)
+    if (non_scadute) params.set("non_scadute", non_scadute)
     if (page) params.set("page", page)
     
     return params.toString()
@@ -155,6 +157,7 @@ export function CigDataProvider() {
     cpv: searchParams.get("cpv") || undefined,
     importo_min: searchParams.get("importo_min") || undefined,
     importo_max: searchParams.get("importo_max") || undefined,
+    non_scadute: searchParams.get("non_scadute") || undefined,
   }), [searchParams, localSearch])
 
   return (

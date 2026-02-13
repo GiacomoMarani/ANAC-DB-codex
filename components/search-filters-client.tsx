@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
 import { Search, X, Filter, Loader2 } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface SearchFiltersProps {
   filterOptions: {
@@ -28,6 +29,7 @@ interface SearchFiltersProps {
     cpv?: string
     importo_min?: string
     importo_max?: string
+    non_scadute?: string
   }
   onSearchChange: (value: string) => void
   onSearchSubmit: () => void
@@ -69,7 +71,8 @@ export function SearchFilters({
     currentFilters.anno ||
     currentFilters.cpv ||
     currentFilters.importo_min ||
-    currentFilters.importo_max
+    currentFilters.importo_max ||
+    currentFilters.non_scadute
   )
 
   return (
@@ -158,6 +161,16 @@ export function SearchFilters({
               ))}
             </SelectContent>
           </Select>
+
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={currentFilters.non_scadute === "true"}
+              onCheckedChange={(checked) =>
+                onFilterChange({ non_scadute: checked ? "true" : undefined })
+              }
+            />
+            Solo offerte non scadute
+          </label>
 
           <Button
             variant="outline"
