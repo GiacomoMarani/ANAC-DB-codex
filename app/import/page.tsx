@@ -5,9 +5,18 @@ import { useDropzone } from "react-dropzone"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Upload, FileJson, CheckCircle2, AlertCircle, ArrowLeft } from "lucide-react"
+import { RefreshCw, CheckCircle2 as SyncCheck, AlertCircle as SyncAlert } from "lucide-react"
 import Link from "next/link"
 import { isActiveTender } from "@/lib/utils/tenderLogic"
+
+import { Upload, FileJson, CheckCircle2, AlertCircle } from "lucide-react"
+
+interface SyncResult {
+  totalImported: number
+  totalSkipped: number
+  totalErrors: number
+  results: Array<{ month: string; imported: number; skipped: number; errors: number }>
+}
 
 interface ImportResult {
   total: number
@@ -21,6 +30,11 @@ export default function ImportPage() {
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [syncMonths, setSyncMonths] = useState(3)
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return
@@ -117,11 +131,41 @@ export default function ImportPage() {
     disabled: isUploading,
   })
 
+  const handleSync = async () => {
+    setIsSyncing(true)
+    setSyncResult(null)
+    setSyncError(null)
+    try {
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ months: getRecentMonthsList(syncMonths) }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Errore sincronizzazione")
+      setSyncResult(data)
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : "Errore sconosciuto")
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  function getRecentMonthsList(count: number): string[] {
+    const months: string[] = []
+    const now = new Date()
+    for (let i = 0; i < count; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`)
+    }
+    return months
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <Link href="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6">
-          <ArrowLeft className="h-4 w-4" />
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
           Torna alla consultazione
         </Link>
 
@@ -227,6 +271,85 @@ export default function ImportPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ANAC API Sync Card */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Sincronizza da API ANAC
+            </CardTitle>
+            <CardDescription>
+              Scarica automaticamente i dati aggiornati dal portale ufficiale ANAC (solo gare attive).
+              Il cron job giornaliero aggiorna il mese corrente ogni notte alle 03:00 UTC.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium whitespace-nowrap">Mesi da sincronizzare:</label>
+              <select
+                className="border rounded px-2 py-1 text-sm bg-background"
+                value={syncMonths}
+                onChange={(e) => setSyncMonths(Number(e.target.value))}
+                disabled={isSyncing}
+              >
+                <option value={1}>Mese corrente</option>
+                <option value={3}>Ultimi 3 mesi</option>
+                <option value={6}>Ultimi 6 mesi</option>
+                <option value={12}>Ultimo anno</option>
+              </select>
+            </div>
+
+            <Button
+              onClick={handleSync}
+              disabled={isSyncing}
+              className="w-full"
+              variant="outline"
+            >
+              {isSyncing ? (
+                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Sincronizzazione in corso...</>
+              ) : (
+                <><RefreshCw className="h-4 w-4 mr-2" />Avvia Sincronizzazione</>  
+              )}
+            </Button>
+
+            {syncError && (
+              <div className="flex items-start gap-3 p-4 bg-destructive/10 text-destructive rounded-lg">
+                <SyncAlert className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Errore</p>
+                  <p className="text-sm">{syncError}</p>
+                </div>
+              </div>
+            )}
+
+            {syncResult && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 p-4 bg-primary/10 text-primary rounded-lg">
+                  <SyncCheck className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Sincronizzazione completata</p>
+                    <p className="text-sm">
+                      {syncResult.totalImported} importati · {syncResult.totalSkipped} scartati · {syncResult.totalErrors} errori
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-muted rounded-lg p-3 text-xs space-y-1">
+                  {syncResult.results.map((r) => (
+                    <div key={r.month} className="flex justify-between text-muted-foreground">
+                      <span className="font-mono">{r.month}</span>
+                      <span>✅ {r.imported} · ⏭ {r.skipped} · ❌ {r.errors}</span>
+                    </div>
+                  ))}
+                </div>
+                <Button asChild className="w-full">
+                  <Link href="/">Vai alla consultazione</Link>
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
       </div>
     </div>
   )
