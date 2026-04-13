@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress"
 import { Upload, FileJson, CheckCircle2, AlertCircle, ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { isActiveTender } from "@/lib/utils/tenderLogic"
 
 interface ImportResult {
   total: number
@@ -39,7 +40,10 @@ export default function ImportPage() {
       for (const line of lines) {
         if (line.trim()) {
           try {
-            records.push(JSON.parse(line))
+            const parsed = JSON.parse(line)
+            if (isActiveTender(parsed)) {
+              records.push(parsed)
+            }
           } catch {
             console.error("Failed to parse line:", line.substring(0, 100))
           }

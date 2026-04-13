@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { Database } from "@/lib/supabase/database.types"
 import { NextResponse } from "next/server"
+import { isActiveTender } from "@/lib/utils/tenderLogic"
 
 interface CigRecord {
   cig: string
@@ -200,6 +201,8 @@ export async function POST(request: Request) {
     // Normalize and prepare records for upsert
     const normalizedRecords = records
       .map((r: CigRecord) => {
+        if (!isActiveTender(r)) return null
+        
         try {
           return normalizeRecord(r)
         } catch (err) {
