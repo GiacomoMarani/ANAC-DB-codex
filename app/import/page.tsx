@@ -154,7 +154,8 @@ export default function ImportPage() {
   function getRecentMonthsList(count: number): string[] {
     const months: string[] = []
     const now = new Date()
-    for (let i = 0; i < count; i++) {
+    // Start from last month — ANAC publishes each month's file on the 2nd of the next month
+    for (let i = 1; i <= count; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`)
     }

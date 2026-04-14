@@ -81,14 +81,21 @@ async function fetchWithRetry(url: string): Promise<Response> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       const res = await fetch(url, {
-        signal: AbortSignal.timeout(60_000), // 60s per chunk
-        headers: { "Accept-Encoding": "gzip" },
+        signal: AbortSignal.timeout(120_000),
+        headers: {
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Encoding": "gzip, deflate, br",
+          "User-Agent": "Mozilla/5.0 (compatible; ANACDataExplorer/1.0; +https://anac-db-codex.vercel.app)",
+        },
       })
       if (res.ok) return res
+      if (res.status === 404) throw new Error(`File non ancora disponibile (HTTP 404): ${url}`)
       if (res.status < 500) throw new Error(`HTTP ${res.status}`) // non-retryable
       lastError = new Error(`HTTP ${res.status}`)
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
+      // Don't retry 404s
+      if (lastError.message.includes("404")) throw lastError
     }
     await delay(BASE_DELAY_MS * Math.pow(2, attempt))
   }
@@ -152,11 +159,12 @@ export async function syncMonth(yearMonth: string): Promise<SyncResult> {
   return result
 }
 
-/** Returns array of "YYYY-MM" strings for the last N months */
+/** Returns array of "YYYY-MM" strings for the last N months, excluding the current month */
 export function getRecentMonths(count = 3): string[] {
   const months: string[] = []
   const now = new Date()
-  for (let i = 0; i < count; i++) {
+  // Start from last month (current month's file is not yet published by ANAC)
+  for (let i = 1; i <= count; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const y = d.getFullYear()
     const m = String(d.getMonth() + 1).padStart(2, "0")
