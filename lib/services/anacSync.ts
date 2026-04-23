@@ -336,9 +336,17 @@ async function upsertBatch(
  * Syncs active tenders for a given month from the ANAC bulk OCDS file.
  * Only records with `tender.status === "active"` are upserted.
  */
+/**
+ * DEADLINE_MS: stop streaming this many ms before Vercel kills the function.
+ * • Vercel Hobby  = 60s  → stop at 50s (10s buffer for final upsert)
+ * • Vercel Pro    = 300s → set SYNC_DEADLINE_MS=280000 in env
+ */
+const DEADLINE_MS = parseInt(process.env.SYNC_DEADLINE_MS ?? "50000")
+
 async function syncMonthBulk(yearMonth: string): Promise<SyncResult> {
   const [year, month] = yearMonth.split("-")
   const url = `${BULK_BASE}/${year}/${month.padStart(2, "0")}.json`
+  const startedAt = Date.now()
 
   const result: SyncResult = {
     month: yearMonth,
@@ -362,6 +370,7 @@ async function syncMonthBulk(yearMonth: string): Promise<SyncResult> {
   const res = await fetchWithRetry(url)
   const supabase = createAdminClient()
   const batch: CigInsert[] = []
+  let timedOut = false
 
   const flush = async () => {
     if (!batch.length) return
@@ -371,6 +380,12 @@ async function syncMonthBulk(yearMonth: string): Promise<SyncResult> {
 
   try {
     for await (const release of streamReleases(res)) {
+      // ── Time guard: stop before Vercel kills the function ────────────────
+      if (Date.now() - startedAt > DEADLINE_MS) {
+        timedOut = true
+        break
+      }
+
       result.fetched++
 
       // ── Filter: only "bandi in corso" (active tenders) ──────────────────
@@ -386,6 +401,14 @@ async function syncMonthBulk(yearMonth: string): Promise<SyncResult> {
       if (batch.length >= BATCH_SIZE) await flush()
     }
     await flush()
+
+    if (timedOut && result.errorMessages.length < 10) {
+      result.errorMessages.push(
+        `Sync parziale: limite ${DEADLINE_MS / 1000}s raggiunto dopo ${result.fetched} record ` +
+        `(${result.imported} importati, ${result.skipped} scartati). ` +
+        `Rilanciare il sync per continuare dall'inizio del file.`
+      )
+    }
   } catch (err) {
     result.errors++
     result.errorMessages.push(

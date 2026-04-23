@@ -15,7 +15,14 @@ interface SyncResult {
   totalImported: number
   totalSkipped: number
   totalErrors: number
-  results: Array<{ month: string; imported: number; skipped: number; errors: number }>
+  results: Array<{
+    month: string
+    source?: string
+    imported: number
+    skipped: number
+    errors: number
+    errorMessages?: string[]
+  }>
 }
 
 interface ImportResult {
@@ -335,11 +342,20 @@ export default function ImportPage() {
                     </p>
                   </div>
                 </div>
-                <div className="bg-muted rounded-lg p-3 text-xs space-y-1">
+                <div className="bg-muted rounded-lg p-3 text-xs space-y-2">
                   {syncResult.results.map((r) => (
-                    <div key={r.month} className="flex justify-between text-muted-foreground">
-                      <span className="font-mono">{r.month}</span>
-                      <span>✅ {r.imported} · ⏭ {r.skipped} · ❌ {r.errors}</span>
+                    <div key={r.month}>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span className="font-mono">{r.month}</span>
+                        <span>✅ {r.imported} · ⏭ {r.skipped} · ❌ {r.errors}</span>
+                      </div>
+                      {r.errorMessages && r.errorMessages.length > 0 && (
+                        <ul className="mt-1 pl-3 text-destructive space-y-0.5">
+                          {r.errorMessages.map((msg, i) => (
+                            <li key={i} className="break-all">⚠ {msg}</li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   ))}
                 </div>
