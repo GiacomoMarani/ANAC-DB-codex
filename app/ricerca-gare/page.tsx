@@ -50,7 +50,7 @@ function daysUntil(d: string | null): number | null {
   return Math.ceil((new Date(d).getTime() - Date.now()) / 86_400_000)
 }
 
-function ScadenzaLabel({ data }: { data: string | null }) {
+function ScadenzaBadge({ data }: { data: string | null }) {
   const days = daysUntil(data)
   if (days === null) return null
   const label = days <= 0 ? "Scaduta" : days === 1 ? "Scade domani" : `Scade tra ${days} giorni`
