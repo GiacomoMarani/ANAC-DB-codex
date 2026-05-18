@@ -25,12 +25,24 @@ export default function HomePage() {
                 Consultazione dati CIG - Contratti Pubblici Italia
               </p>
             </div>
-            <Button asChild>
-              <Link href="/import">
-                <Upload className="h-4 w-4 mr-2" />
-                Importa dati
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button asChild variant="outline">
+                <Link href="/gare">
+                  🔍 Gare pubbliche
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/ricerca-gare">
+                  ✨ Ricerca AI
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link href="/import">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importa dati
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
       </header>
