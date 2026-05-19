@@ -48,11 +48,12 @@ function mapTedNotice(n: any): NormalizedTender {
     (pubNum ? `https://ted.europa.eu/it/notice/-/detail/${pubNum}` : null)
 
   // Titolo: prova più campi in ordine di preferenza
+  // TED v3: title-lot (lotti eForms), notice-title (CN standard), announcement-title, title-proc
   const titleText =
-    extractLang(n["title-lot"] as Record<string,string[]>) ??
-    extractLang(n["notice-title"] as Record<string,string[]>) ??
-    extractLang(n["object-description"] as Record<string,string[]>) ??
-    extractLang(n["subject"] as Record<string,string[]>) ??
+    extractLang(n["title-lot"]        as Record<string,string[]>) ??
+    extractLang(n["notice-title"]     as Record<string,string[]>) ??
+    extractLang(n["announcement-title"] as Record<string,string[]>) ??
+    extractLang(n["title-proc"]       as Record<string,string[]>) ??
     (pubNum ? `Bando TED n. ${pubNum}` : null)
 
   // Importo
@@ -72,8 +73,11 @@ function mapTedNotice(n: any): NormalizedTender {
   const cpvText = typeof cpvRaw === "object" ? extractLang(cpvRaw as Record<string,string[]>) : String(cpvRaw ?? "")
 
   // Date
+  // publication-date = data di pubblicazione sul TES
+  // dispatch-date = data di invio al giornale
+  // deadline-date-lot = scadenza offerte (eForms), deadline = scadenza legacy
   const dataPub = n["publication-date"] ?? n["dispatch-date"] ?? null
-  const dataScadenza = n["submission-deadline"] ?? n["deadline-receipt-tenders"] ?? null
+  const dataScadenza = n["deadline-date-lot"] ?? n["deadline"] ?? null
 
   return {
     id:                  `ted:${pubNum}`,
@@ -150,23 +154,23 @@ export async function fetchTED(
 
   const body = {
     query:  expertQuery || "*",
+    // Solo campi validi per TED API v3
+    // (verificati tramite ispezione del messaggio di errore 400)
     fields: [
       "publication-number",
-      "publication-name",
-      "notice-identifier",
-      "title-lot",
-      "notice-title",
-      "object-description",
-      "subject",
+      "title-lot",          // Titolo lotto (eForms moderni)
+      "notice-title",       // Titolo notice (CN legacy)
+      "announcement-title", // Titolo annuncio
+      "title-proc",         // Titolo procedura
       "total-value",
       "buyer-name",
-      "main-classification-proc",
-      "contract-nature-main-lot",
-      "links",
       "publication-date",
       "dispatch-date",
-      "submission-deadline",
-      "deadline-receipt-tenders",
+      "deadline-date-lot",  // Scadenza offerte (eForms)
+      "deadline",           // Scadenza legacy
+      "contract-nature-main-lot",
+      "links",
+      "main-classification-proc",
     ],
     page:  page + 1,
     limit: pageSize,

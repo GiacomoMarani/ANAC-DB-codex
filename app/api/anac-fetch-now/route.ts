@@ -10,18 +10,38 @@
  *  200 → { ok: true, items, total, source: "playwright" }
  *  503 → { error: "...", fallback: true }  (usa il console script invece)
  *
- * NOTA: questa route usa Playwright che richiede il binario Chromium.
- * Funziona in locale (Next.js dev). In produzione serverless non è disponibile.
+ * NOTA: Playwright richiede il binario Chromium (non disponibile su Vercel serverless).
+ * In ambienti serverless risponde immediatamente con fallback:true.
+ * Funziona solo in locale (Next.js dev / server dedicato).
  */
 
-import { NextRequest, NextResponse }     from "next/server"
-import { fetchAnacWithPlaywright }        from "@/lib/anac-playwright-fetcher"
-import type { AnacFetchParams }           from "@/lib/sources/anac"
+import { NextRequest, NextResponse } from "next/server"
+import type { AnacFetchParams }      from "@/lib/sources/anac"
 
 // Previeni richieste concorrenti (una sola sessione Playwright alla volta)
 let _inFlight = false
 
 export async function POST(req: NextRequest) {
+  // ── Rilevamento ambiente serverless ───────────────────────────────────────
+  // Vercel setta VERCEL=1; in questi ambienti Playwright non può avviare Chromium.
+  const isServerless = !!(
+    process.env.VERCEL ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.NETLIFY ||
+    process.env.CF_PAGES
+  )
+
+  if (isServerless) {
+    return NextResponse.json(
+      {
+        fallback: true,
+        reason:   "serverless",
+        message:  "Playwright non disponibile in ambiente serverless. Usa il relay manuale.",
+      },
+      { status: 503 },
+    )
+  }
+
   try {
     const { key, params } = await req.json() as {
       key:    string
@@ -32,7 +52,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "key e params richiesti" }, { status: 400 })
     }
 
-    // Dedup: se c'è già una richiesta in volo, aspetta 500ms e riprova
     if (_inFlight) {
       return NextResponse.json(
         { queued: true, message: "Fetch già in corso, riprova tra 3s" },
@@ -42,11 +61,11 @@ export async function POST(req: NextRequest) {
 
     _inFlight = true
     try {
+      // Import dinamico per evitare bundling su serverless
+      const { fetchAnacWithPlaywright } = await import("@/lib/anac-playwright-fetcher")
       const result = await fetchAnacWithPlaywright(params)
 
-      // Salva nel data store — mappiamo NormalizedTender → raw rows
-      // che il /api/anac-data riconvertirà via mapAnacRow
-      const storeRes = await fetch(
+      await fetch(
         new URL("/api/anac-data", req.url).toString(),
         {
           method:  "POST",
@@ -69,10 +88,6 @@ export async function POST(req: NextRequest) {
         },
       )
 
-      if (!storeRes.ok) {
-        console.warn("[ANAC-FETCH-NOW] Store save failed:", storeRes.status)
-      }
-
       return NextResponse.json({
         ok:     true,
         items:  result.items.length,
@@ -88,10 +103,7 @@ export async function POST(req: NextRequest) {
     console.error("[ANAC-FETCH-NOW] Error:", message)
 
     return NextResponse.json(
-      {
-        error:    message,
-        fallback: true,  // il client può mostrare le istruzioni manuali come fallback
-      },
+      { error: message, fallback: true },
       { status: 503 },
     )
   }

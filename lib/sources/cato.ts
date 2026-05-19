@@ -11,18 +11,26 @@ import type { NormalizedTender, SourceKey, SourceResult } from "./types"
 
 const CATO_BASE = "https://www.get-cato.com/api/tenders"
 
-const IMPORTO_MAP: Record<string, string> = {
-  "< €40.000":    "< €40.000",
-  "€40k – €150k": "€40k – €150k",
-  "€150k – €1M":  "€150k – €1M",
-  "€1M – €5M":    "€1M – €5M",
-  "> €5M":        "> €5M",
+/**
+ * Mappa fasce importo → parametri min/max numerici in euro
+ * (CATO usa ?min=150000&max=1000000, NON la stringa label)
+ */
+const IMPORTO_TO_MINMAX: Record<string, { min?: number; max?: number }> = {
+  "< €40.000":    { max: 40_000 },
+  "€40k – €150k": { min: 40_000,   max: 150_000 },
+  "€150k – €1M":  { min: 150_000,  max: 1_000_000 },
+  "€1M – €5M":    { min: 1_000_000, max: 5_000_000 },
+  "> €5M":        { min: 5_000_000 },
 }
 
-const SCADENZA_MAP: Record<string, string> = {
-  "7":  "Entro 7 giorni",
-  "30": "Entro 30 giorni",
-  "90": "Entro 3 mesi",
+/**
+ * Mappa tipo contratto → valori accettati da CATO
+ * (dall'ispezione dei select del portale get-cato.com/gare)
+ */
+const TIPO_TO_CATO: Record<string, string> = {
+  goods:    "Forniture",
+  services: "Servizi",
+  works:    "Lavori pubblici",
 }
 
 export interface CatoFetchParams {
@@ -107,15 +115,27 @@ export async function fetchCato(
   const p = new URLSearchParams()
   p.set("p", String(page))
 
-  // Ricerca: combina q + tipo come Cato si aspetta
-  const qParts = [q, tipo].filter(Boolean)
-  if (qParts.length) p.set("q", qParts.join(" ").trim())
+  // Ricerca full-text
+  if (q) p.set("q", q.trim())
 
-  if (importo) p.set("importo", IMPORTO_MAP[importo] ?? importo)
-  if (scadenza) {
-    const label = SCADENZA_MAP[scadenza]
-    if (label) p.set("scadenza", label)
+  // Tipo procedura: usa i valori nativi CATO
+  if (tipo) {
+    const catoTipo = TIPO_TO_CATO[tipo.toLowerCase()] ?? tipo
+    p.set("tipo", catoTipo)
   }
+
+  // Importo: usa min/max numerici in euro
+  if (importo) {
+    const range = IMPORTO_TO_MINMAX[importo]
+    if (range) {
+      if (range.min != null) p.set("min", String(range.min))
+      if (range.max != null) p.set("max", String(range.max))
+    }
+  }
+
+  // Scadenza: giorni numerici (CATO li accetta direttamente: 7, 30, 90)
+  if (scadenza) p.set("scadenza", scadenza)
+
   // Filtro fonte nativo Cato
   if (source) p.set("source", source)
 
