@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ANAC Relay — DB Codex
 // @namespace    https://anac-db-codex.vercel.app
-// @version      2.0
+// @version      2.1
 // @description  Relay automatico: recupera i bandi ANAC in corso e li invia all'app. Zero azioni manuali dopo l'installazione.
 // @author       ANAC-DB-Codex
 // @match        https://dati.anticorruzione.it/*
@@ -96,12 +96,19 @@
   async function queryANAC(params) {
     const csrf = await getCsrf()
 
+    // Colonne verificate dall'ispezione DevTools sul datasource appalti."05_all" (id:88)
     const cols = [
-      'cig', 'oggetto_bando', 'importo_lotto',
+      'cig',
+      'oggetto_bando',
+      'importo_lotto',
       'denominazione_amministrazione_appaltante',
-      'data_pubblicazione', 'oggetto_principale_contratto',
-      'tipo_scelta_contraente', 'sezione_regionale',
-      'cod_cpv', 'flag_pnrr_pnc',
+      'data_pubblicazione',
+      'oggetto_principale_contratto',
+      'tipo_scelta_contraente',
+      'sezione_regionale',
+      'cod_cpv',
+      'flag_pnrr_pnc',
+      'data_scadenza_offerta',
     ]
 
     const filters = []
@@ -117,11 +124,12 @@
       })
     }
 
-    const pageSize   = params.pageSize || 10
-    const rowOffset  = (params.page || 0) * pageSize
+    const pageSize  = params.pageSize || 10
+    const rowOffset = (params.page || 0) * pageSize
 
     const payload = {
-      datasource:  { id: 81, type: 'table' },
+      // datasource verificato da DevTools: appalti."05_all" (bandi in corso)
+      datasource:  { id: 88, type: 'table' },
       force:       false,
       queries:     [{
         time_range:   'No filter',
@@ -141,7 +149,7 @@
         groupby:      [],
       }],
       form_data: {
-        datasource:   '81__table',
+        datasource:   '88__table',
         viz_type:     'table',
         query_mode:   'raw',
         all_columns:  cols,
@@ -210,12 +218,14 @@
   // ── Loop principale ────────────────────────────────────────────────────────
 
   async function loop() {
+    log(`▶ Loop avviato. App: ${APP_URL}`)
     while (_running) {
       try {
         const req = await fetchRequest()
+        log(`Poll → req=${req ? req.key : 'nessuna'}, lastKey=${_lastKey}`)
 
         if (req && req.key && req.key !== _lastKey) {
-          log('Nuova richiesta:', req.key)
+          log('✦ Nuova richiesta:', req.key, 'params:', JSON.stringify(req.params || {}))
           _lastKey = req.key
 
           const result = await queryANAC(req.params || {})
@@ -224,7 +234,7 @@
             log(`✓ Inviati ${result.rows.length} bandi (tot: ${result.total})`)
             _errors = 0
           } else {
-            warn('Query fallita')
+            warn('✗ Query ANAC fallita')
             _errors++
             if (_errors >= 3) {
               _csrf = null   // reset CSRF dopo 3 errori consecutivi
