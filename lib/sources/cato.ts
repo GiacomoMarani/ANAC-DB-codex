@@ -115,14 +115,11 @@ export async function fetchCato(
   const p = new URLSearchParams()
   p.set("p", String(page))
 
-  // Ricerca full-text
-  if (q) p.set("q", q.trim())
-
-  // Tipo procedura: usa i valori nativi CATO
-  if (tipo) {
-    const catoTipo = TIPO_TO_CATO[tipo.toLowerCase()] ?? tipo
-    p.set("tipo", catoTipo)
-  }
+  // CATO non supporta un parametro "tipo" separato.
+  // Combina q + la keyword del tipo come ricerca full-text.
+  const tipoKeyword = tipo ? (TIPO_TO_CATO[tipo.toLowerCase()] ?? tipo) : null
+  const qFull = [q?.trim(), tipoKeyword].filter(Boolean).join(" ") || undefined
+  if (qFull) p.set("q", qFull)
 
   // Importo: usa min/max numerici in euro
   if (importo) {

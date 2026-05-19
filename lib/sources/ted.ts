@@ -137,8 +137,9 @@ export async function fetchTED(
       deadline.setDate(today.getDate() + days)
       const todayStr    = today.toISOString().split("T")[0]
       const deadlineStr = deadline.toISOString().split("T")[0]
-      clauses.push(`submission-deadline>=${todayStr}`)
-      clauses.push(`submission-deadline<=${deadlineStr}`)
+      // deadline-date-lot è il campo valido per TED API v3 (submission-deadline non esiste)
+      clauses.push(`deadline-date-lot>=${todayStr}`)
+      clauses.push(`deadline-date-lot<=${deadlineStr}`)
     }
   }
 
@@ -147,15 +148,15 @@ export async function fetchTED(
   if (importoRange?.lte != null) clauses.push(`total-value<=${importoRange.lte}`)
 
   // Testo libero + clausole
+  // NOTA: NON usare parentesi intorno al testo libero — causano errore di sintassi
   const expertQuery = [
-    ...(q ? [`(${q})`] : []),
+    ...(q ? [q] : []),          // q senza parentesi
     ...clauses,
   ].join(" AND ")
 
   const body = {
-    query:  expertQuery || "*",
+    query:  expertQuery || "buyer-country=ITA",
     // Solo campi validi per TED API v3
-    // (verificati tramite ispezione del messaggio di errore 400)
     fields: [
       "publication-number",
       "title-lot",          // Titolo lotto (eForms moderni)
@@ -172,6 +173,7 @@ export async function fetchTED(
       "links",
       "main-classification-proc",
     ],
+    sort:  [{ field: "publication-date", order: "DESC" }],
     page:  page + 1,
     limit: pageSize,
   }
