@@ -47,11 +47,13 @@ function mapTedNotice(n: any): NormalizedTender {
     n.links?.html?.ENG ??
     (pubNum ? `https://ted.europa.eu/it/notice/-/detail/${pubNum}` : null)
 
-  // Titolo dal campo title-lot (multilingua o stringa diretta)
-  const titleRaw = n["title-lot"]
-  const titleText = typeof titleRaw === "object"
-    ? extractLang(titleRaw as Record<string, string[]>)
-    : (titleRaw as string | null) ?? null
+  // Titolo: prova più campi in ordine di preferenza
+  const titleText =
+    extractLang(n["title-lot"] as Record<string,string[]>) ??
+    extractLang(n["notice-title"] as Record<string,string[]>) ??
+    extractLang(n["object-description"] as Record<string,string[]>) ??
+    extractLang(n["subject"] as Record<string,string[]>) ??
+    (pubNum ? `Bando TED n. ${pubNum}` : null)
 
   // Importo
   const totalVal = n["total-value"]
@@ -67,19 +69,21 @@ function mapTedNotice(n: any): NormalizedTender {
 
   // CPV
   const cpvRaw  = n["main-classification-proc"] ?? n["cpv-code"] ?? null
-  const cpvText = typeof cpvRaw === "object" ? extractLang(cpvRaw as Record<string, string[]>) : String(cpvRaw ?? "")
+  const cpvText = typeof cpvRaw === "object" ? extractLang(cpvRaw as Record<string,string[]>) : String(cpvRaw ?? "")
+
+  // Date
+  const dataPub = n["publication-date"] ?? n["dispatch-date"] ?? null
+  const dataScadenza = n["submission-deadline"] ?? n["deadline-receipt-tenders"] ?? null
 
   return {
     id:                  `ted:${pubNum}`,
     cig:                 pubNum,
-    // Fallback: se title-lot è null (notice pre-eForms), usiamo il numero notice formattato
-    oggetto:             titleText
-                          ?? (pubNum ? `Bando TED n. ${pubNum}` : null),
+    oggetto:             titleText,
     importo,
     stato:               "active",
     provincia:           null,
-    data_pubblicazione:  n["publication-date"] ?? n["dispatch-date"] ?? null,
-    data_scadenza:       n["submission-deadline"] ?? n["deadline-receipt-tenders"] ?? null,
+    data_pubblicazione:  dataPub,
+    data_scadenza:       dataScadenza,
     tipo_contratto:      n["contract-nature-main-lot"] ?? null,
     descrizione_cpv:     cpvText || null,
     sources:             "ted",
@@ -151,11 +155,18 @@ export async function fetchTED(
       "publication-name",
       "notice-identifier",
       "title-lot",
+      "notice-title",
+      "object-description",
+      "subject",
       "total-value",
       "buyer-name",
       "main-classification-proc",
       "contract-nature-main-lot",
       "links",
+      "publication-date",
+      "dispatch-date",
+      "submission-deadline",
+      "deadline-receipt-tenders",
     ],
     page:  page + 1,
     limit: pageSize,

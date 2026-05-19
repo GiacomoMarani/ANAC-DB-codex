@@ -83,14 +83,25 @@ async function ensureSession(): Promise<void> {
   const page = await ctx.newPage()
   try {
     console.log("[ANAC-PLAYWRIGHT] Inizializzazione sessione ANAC…")
+    // Prima naviga su dati.anticorruzione.it per stabilire i cookie
+    await page.goto("https://dati.anticorruzione.it/", {
+      waitUntil: "domcontentloaded",
+      timeout:   20_000,
+    })
+    // Aspetta che Superset abbia impostato i cookie di sessione
+    await page.waitForTimeout(1_500)
+    // Poi naviga sulla dashboard per ottenere la sessione autenticata
     await page.goto(ANAC_DASHBOARD, {
       waitUntil: "domcontentloaded",
-      timeout:   30_000,
+      timeout:   25_000,
     })
-    // Aspetta che Superset abbia inizializzato i cookie
     await page.waitForTimeout(2_000)
     global.__anacSessionOk = true
     console.log("[ANAC-PLAYWRIGHT] Sessione ANAC inizializzata ✓")
+  } catch (err) {
+    console.warn("[ANAC-PLAYWRIGHT] Sessione parziale:", (err as Error).message)
+    // Non blocchiamo — proviamo comunque la query
+    global.__anacSessionOk = true
   } finally {
     await page.close()
   }
@@ -169,6 +180,14 @@ export async function fetchAnacWithPlaywright(
       }
 
       throw new Error(`ANAC HTTP ${res.status()}: ${text.slice(0, 200)}`)
+    }
+
+    // Controllo anti-WAF: se la risposta è HTML invece di JSON, il WAF ha bloccato
+    const contentType = res.headers()["content-type"] ?? ""
+    if (!contentType.includes("json")) {
+      global.__anacCsrf       = undefined
+      global.__anacSessionOk  = false
+      throw new Error(`WAF block: risposta HTML (content-type: ${contentType}) — sessione scaduta`)
     }
 
     const data   = await res.json() as {
