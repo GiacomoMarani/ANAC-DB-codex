@@ -147,33 +147,38 @@ export async function fetchTED(
   if (importoRange?.gte != null) clauses.push(`total-value>=${importoRange.gte}`)
   if (importoRange?.lte != null) clauses.push(`total-value<=${importoRange.lte}`)
 
+  // Filtro automatico per recency: ultime 12 mesi
+  // (TED v3 NON supporta sort — filtriamo per data per ottenere bandi recenti)
+  const oneYearAgo = new Date()
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+  clauses.push(`publication-date>=${oneYearAgo.toISOString().split("T")[0]}`)
+
   // Testo libero + clausole
   // NOTA: NON usare parentesi intorno al testo libero — causano errore di sintassi
   const expertQuery = [
-    ...(q ? [q] : []),          // q senza parentesi
+    ...(q ? [q] : []),
     ...clauses,
   ].join(" AND ")
 
   const body = {
-    query:  expertQuery || "buyer-country=ITA",
-    // Solo campi validi per TED API v3
+    query:  expertQuery || `buyer-country=ITA AND publication-date>=${new Date(Date.now() - 365*86400000).toISOString().split("T")[0]}`,
+    // Solo campi validi per TED API v3 (sort non è supportato)
     fields: [
       "publication-number",
-      "title-lot",          // Titolo lotto (eForms moderni)
-      "notice-title",       // Titolo notice (CN legacy)
-      "announcement-title", // Titolo annuncio
-      "title-proc",         // Titolo procedura
+      "title-lot",
+      "notice-title",
+      "announcement-title",
+      "title-proc",
       "total-value",
       "buyer-name",
       "publication-date",
       "dispatch-date",
-      "deadline-date-lot",  // Scadenza offerte (eForms)
-      "deadline",           // Scadenza legacy
+      "deadline-date-lot",
+      "deadline",
       "contract-nature-main-lot",
       "links",
       "main-classification-proc",
     ],
-    sort:  [{ field: "publication-date", order: "DESC" }],
     page:  page + 1,
     limit: pageSize,
   }
