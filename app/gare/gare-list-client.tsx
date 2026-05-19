@@ -5,41 +5,64 @@ import useSWR from "swr"
 import {
   Search, SlidersHorizontal, ChevronLeft, ChevronRight,
   ExternalLink, Clock, Euro, Building2, MapPin, FileText, Loader2,
+  Globe, Wifi, WifiOff, RefreshCw, ShieldCheck,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
+import { Button }  from "@/components/ui/button"
+import { Input }   from "@/components/ui/input"
+import { Badge }   from "@/components/ui/badge"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
+import type { SourceKey } from "@/lib/sources/types"
+import { SOURCE_LABELS, SOURCE_COLORS } from "@/lib/sources/types"
+import { useAnacTenders } from "@/lib/hooks/use-anac-tenders"
+import type { AnacFetchParams } from "@/lib/sources/anac"
+import type { NormalizedTender } from "@/lib/sources/types"
+import { ANAC_CONSOLE_SCRIPT_MINI } from "@/lib/anac-console-script"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CigLotto {
-  cig: string
-  lotto: string
+  cig:         string
+  lotto:       string
   valore_lotto: number
 }
 
 interface TenderItem {
-  id: number
-  cig: CigLotto[] | string | null  // Cato returns array of lots
-  oggetto: string | null
-  importo: number | null
-  stato: string | null
-  provincia: string | null
-  data_pubblicazione: string | null
-  data_scadenza: string | null
-  tipo_contratto: string | null   // Contains CPV codes in Cato data
-  descrizione_cpv: string | null
-  sources: string
-  link_originale: string | null
+  id:                  string | number
+  cig:                 CigLotto[] | string | null
+  oggetto:             string | null
+  importo:             number | null
+  stato:               string | null
+  provincia:           string | null
+  data_pubblicazione:  string | null
+  data_scadenza:       string | null
+  tipo_contratto:      string | null
+  descrizione_cpv:     string | null
+  sources:             string
+  link_originale:      string | null
+  stazione_appaltante: string | null
 }
 
 interface TendersResponse {
-  items: TenderItem[]
-  total: number
+  items:   TenderItem[]
+  total:   number
+  sources?: { source: SourceKey; count: number; error?: string }[]
 }
+
+// ─── Fonti disponibili ────────────────────────────────────────────────────────
+
+const ALL_SOURCES: { value: SourceKey | "all"; label: string; flag?: string }[] = [
+  { value: "all",          label: "Tutte le fonti" },
+  { value: "anac",         label: "ANAC (Bandi in corso)", flag: "🏛️" },
+  { value: "ted",          label: "TED Europa",             flag: "🇪🇺" },
+  { value: "sintel",       label: "Sintel (Lombardia)",     flag: "🏛️" },
+  { value: "mepa",         label: "MePA / AcquistinRetePa", flag: "🇮🇹" },
+  { value: "start_toscana",label: "Start Toscana",          flag: "🌿" },
+  { value: "halleyweb",    label: "Halley Web",             flag: "🌐" },
+  { value: "place_vda",    label: "Valle d'Aosta",          flag: "⛰️" },
+  { value: "cato",         label: "CATO (tutte)",           flag: "📡" },
+]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -74,40 +97,245 @@ function ScadenzaBadge({ data }: { data: string | null }) {
   )
 }
 
+function SourceBadge({ source }: { source: string }) {
+  const key    = source as SourceKey
+  const colors = SOURCE_COLORS[key] ?? { bg: "bg-gray-500/15", text: "text-gray-700", border: "border-gray-200" }
+  const label  = SOURCE_LABELS[key] ?? source.toUpperCase()
+  const entry  = ALL_SOURCES.find(s => s.value === key)
+
+  return (
+    <Badge
+      variant="outline"
+      className={`text-xs font-medium px-2 py-0.5 ${colors.bg} ${colors.text} ${colors.border}`}
+    >
+      {entry?.flag && <span className="mr-1">{entry.flag}</span>}
+      {label}
+    </Badge>
+  )
+}
+
+// ─── ANAC Live Panel ──────────────────────────────────────────────────────────
+
+function AnacLivePanel({
+  anac, onRetry,
+}: {
+  anac: ReturnType<typeof useAnacTenders>
+  onRetry: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const isWaiting = anac.isLoading && !anac.error
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(ANAC_CONSOLE_SCRIPT_MINI)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2_500)
+    } catch {
+      window.prompt("Copia questo script e incollalo nella console ANAC (F12):", ANAC_CONSOLE_SCRIPT_MINI)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 dark:bg-indigo-950/20 dark:border-indigo-800/50 p-4 space-y-3">
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 flex-wrap">
+          <ShieldCheck className="h-4 w-4 text-indigo-600 shrink-0" />
+          <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+            BDNCP · Bandi in Corso
+          </span>
+
+          {anac.isLive && (
+            <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+              <Wifi className="h-3 w-3" /> Live
+              {typeof anac.dataAge === "number" && (
+                <span className="text-emerald-500/70 ml-0.5">
+                  · {anac.dataAge}s fa
+                </span>
+              )}
+            </span>
+          )}
+
+          {isWaiting && (
+            <span className="inline-flex items-center gap-1 text-xs text-indigo-500 font-medium">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Attendo dati dal relay…
+            </span>
+          )}
+
+          {anac.error && (
+            <span className="inline-flex items-center gap-1 text-xs text-rose-600 font-medium">
+              <WifiOff className="h-3 w-3" /> Non connesso
+            </span>
+          )}
+        </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-indigo-600 hover:text-indigo-800 shrink-0"
+          onClick={onRetry}
+          disabled={anac.isLoading}
+        >
+          <RefreshCw className={`h-3.5 w-3.5 mr-1 ${anac.isLoading ? "animate-spin" : ""}`} />
+          Riavvia
+        </Button>
+      </div>
+
+      {/* ── Istruzioni console script (mostrate quando non è live) ── */}
+      {!anac.isLive && (
+        <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2.5">
+
+          {/* Errore timeout */}
+          {anac.error && (
+            <div className="text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded px-2 py-1 border border-rose-200 dark:border-rose-800">
+              {anac.error}
+            </div>
+          )}
+
+          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+            🔌 Attiva il relay ANAC (una volta sola)
+          </p>
+
+          <ol className="text-xs text-slate-600 dark:text-slate-400 space-y-1 list-decimal list-inside leading-relaxed">
+            <li>
+              Apri{" "}
+              <a
+                href="https://dati.anticorruzione.it/superset/dashboard/appalti/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-600 underline font-medium"
+              >
+                dati.anticorruzione.it
+              </a>
+              {" "}(aspetta che carichi la dashboard)
+            </li>
+            <li>
+              Premi{" "}
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 font-mono text-[10px]">F12</kbd>
+              {" "}→ tab <strong>Console</strong>
+            </li>
+            <li>Clicca il pulsante qui sotto per copiare lo script, incollalo e premi Invio</li>
+          </ol>
+
+          {/* Pulsante copia */}
+          <div className="flex items-center gap-3">
+            <Button
+              size="sm"
+              className={`h-8 px-4 text-xs font-semibold transition-all ${
+                copied
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  : "bg-indigo-600 hover:bg-indigo-700 text-white"
+              }`}
+              onClick={handleCopy}
+            >
+              {copied
+                ? <><span className="mr-1">✓</span> Copiato!</>
+                : <><span className="mr-1">📋</span> Copia script relay</>
+              }
+            </Button>
+
+            {isWaiting && (
+              <span className="text-xs text-slate-500 italic">
+                In attesa che il relay invii i dati…
+              </span>
+            )}
+          </div>
+
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            Lo script rimane attivo in background e aggiorna automaticamente i bandi
+            quando cambi filtri o pagina. Fermalo con <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">window._anacRelay.stop()</code>
+          </p>
+        </div>
+      )}
+
+      {/* ── Stato OK ── */}
+      {anac.isLive && (
+        <p className="text-xs text-indigo-600/70">
+          <span className="font-semibold">{anac.total.toLocaleString("it-IT")}</span>{" "}
+          bandi in corso · Fonte: BDNCP — Banca Dati Nazionale Contratti Pubblici (ANAC)
+          {typeof anac.dataAge === "number" && anac.dataAge > 60 && (
+            <span className="ml-2 text-amber-500">
+              · aggiornato {Math.floor(anac.dataAge / 60)}m fa
+            </span>
+          )}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function GareListClient() {
-  const [search, setSearch]     = useState("")
-  const [tipo, setTipo]         = useState("")
-  const [importo, setImporto]   = useState("")
+  const [search,   setSearch]   = useState("")
+  const [tipo,     setTipo]     = useState("")
+  const [importo,  setImporto]  = useState("")
   const [scadenza, setScadenza] = useState("")
-  const [page, setPage]         = useState(0)
+  const [source,   setSource]   = useState<SourceKey | "all">("all")
+  const [page,     setPage]     = useState(0)
 
   const deferredSearch = useDeferredValue(search)
 
+  const isAnacMode = source === "anac"
+
+  // ── Parametri ANAC ──────────────────────────────────────────────────────────
+  const anacParams = useMemo<AnacFetchParams>(() => ({
+    q:        deferredSearch || undefined,
+    page,
+    pageSize: 10,
+    tipo:     tipo && tipo !== "all" ? tipo : undefined,
+    importo:  importo && importo !== "all" ? importo : undefined,
+    inCorso:  true,
+  }), [deferredSearch, page, tipo, importo])
+
+  // ── Hook ANAC (attivo solo in modalità ANAC) ─────────────────────────────────
+  // Lo chiamiamo sempre (regole degli hook) ma ignoriamo i dati se !isAnacMode
+  const anac = useAnacTenders(isAnacMode ? anacParams : { pageSize: 0 })
+
+  // ── Query string per /api/tenders (non-ANAC) ─────────────────────────────────
   const queryString = useMemo(() => {
+    if (isAnacMode) return ""  // non usato
     const params = new URLSearchParams()
     params.set("p", String(page))
-    if (deferredSearch) params.set("q", deferredSearch)
-    if (tipo && tipo !== "all")     params.set("tipo", tipo)
+    if (deferredSearch)               params.set("q",       deferredSearch)
+    if (tipo    && tipo    !== "all") params.set("tipo",    tipo)
     if (importo && importo !== "all") params.set("importo", importo)
     if (scadenza && scadenza !== "all") params.set("scadenza", scadenza)
+    if (source  && source  !== "all") params.set("source",  source)
     return params.toString()
-  }, [page, deferredSearch, tipo, importo, scadenza])
+  }, [page, deferredSearch, tipo, importo, scadenza, source, isAnacMode])
 
-  const { data, isLoading } = useSWR<TendersResponse>(
-    `/api/tenders?${queryString}`,
+  const { data, isLoading: swrLoading } = useSWR<TendersResponse>(
+    isAnacMode ? null : `/api/tenders?${queryString}`,
     fetcher,
-    { revalidateOnFocus: false, keepPreviousData: true }
+    { revalidateOnFocus: false, keepPreviousData: true },
   )
 
-  const totalPages = data ? Math.ceil(data.total / 10) : 0
+  // ── Dati unificati ─────────────────────────────────────────────────────────
+  const items: TenderItem[] = isAnacMode
+    ? (anac.items as unknown as TenderItem[])
+    : (data?.items || [])
+
+  const total     = isAnacMode ? anac.total     : (data?.total ?? 0)
+  const isLoading = isAnacMode ? anac.isLoading : swrLoading
+  const totalPages = total > 0 ? Math.ceil(total / 10) : 0
 
   const resetFilters = useCallback(() => {
-    setSearch(""); setTipo(""); setImporto(""); setScadenza(""); setPage(0)
+    setSearch(""); setTipo(""); setImporto(""); setScadenza(""); setSource("all"); setPage(0)
   }, [])
 
   const handleFilterChange = useCallback(() => setPage(0), [])
+  const handleAnacRetry = useCallback(() => {
+    setPage(0)
+    anac.refetch()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anac.refetch])
+
+  const hasFilters = !!(search || tipo || importo || scadenza || source !== "all")
+
+  const sourceStats = data?.sources?.filter(s => s.count > 0 || s.error)
 
   return (
     <div className="space-y-6">
@@ -118,7 +346,11 @@ export function GareListClient() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             id="gare-search"
-            placeholder="Cerca per oggetto della gara..."
+            placeholder={
+              isAnacMode
+                ? "Cerca nei bandi ANAC in corso (oggetto gara)…"
+                : "Cerca per oggetto della gara…"
+            }
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(0) }}
             className="pl-10 h-11 text-base"
@@ -133,6 +365,26 @@ export function GareListClient() {
       <div className="flex flex-wrap gap-3 items-center">
         <SlidersHorizontal className="h-4 w-4 text-muted-foreground shrink-0" />
 
+        {/* Fonte */}
+        <Select
+          value={source}
+          onValueChange={v => { setSource(v as SourceKey | "all"); handleFilterChange() }}
+        >
+          <SelectTrigger id="filter-source" className="w-[220px]">
+            <Globe className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+            <SelectValue placeholder="Tutte le fonti" />
+          </SelectTrigger>
+          <SelectContent>
+            {ALL_SOURCES.map(s => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.flag && <span className="mr-1.5">{s.flag}</span>}
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Tipo procedura */}
         <Select value={tipo || "all"} onValueChange={v => { setTipo(v === "all" ? "" : v); handleFilterChange() }}>
           <SelectTrigger id="filter-tipo" className="w-[180px]">
             <SelectValue placeholder="Tipo procedura" />
@@ -145,6 +397,7 @@ export function GareListClient() {
           </SelectContent>
         </Select>
 
+        {/* Importo */}
         <Select value={importo || "all"} onValueChange={v => { setImporto(v === "all" ? "" : v); handleFilterChange() }}>
           <SelectTrigger id="filter-importo" className="w-[180px]">
             <SelectValue placeholder="Valore appalto" />
@@ -159,32 +412,54 @@ export function GareListClient() {
           </SelectContent>
         </Select>
 
-        <Select value={scadenza || "all"} onValueChange={v => { setScadenza(v === "all" ? "" : v); handleFilterChange() }}>
-          <SelectTrigger id="filter-scadenza" className="w-[180px]">
-            <SelectValue placeholder="Scadenza offerte" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Scadenza offerte</SelectItem>
-            <SelectItem value="7">Entro 7 giorni</SelectItem>
-            <SelectItem value="30">Entro 30 giorni</SelectItem>
-            <SelectItem value="90">Entro 3 mesi</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Scadenza (solo non-ANAC: BANDI_IN_CORSO è già filtrato) */}
+        {!isAnacMode && (
+          <Select value={scadenza || "all"} onValueChange={v => { setScadenza(v === "all" ? "" : v); handleFilterChange() }}>
+            <SelectTrigger id="filter-scadenza" className="w-[180px]">
+              <SelectValue placeholder="Scadenza offerte" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Scadenza offerte</SelectItem>
+              <SelectItem value="7">Entro 7 giorni</SelectItem>
+              <SelectItem value="30">Entro 30 giorni</SelectItem>
+              <SelectItem value="90">Entro 3 mesi</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
 
-        {(search || tipo || importo || scadenza) && (
+        {hasFilters && (
           <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground">
             Cancella filtri
           </Button>
         )}
       </div>
 
+      {/* ── ANAC Live Panel ── */}
+      {isAnacMode && (
+        <AnacLivePanel anac={anac} onRetry={handleAnacRetry} />
+      )}
+
+      {/* ── Source Stats (non-ANAC) ── */}
+      {!isAnacMode && sourceStats && sourceStats.length > 0 && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-xs text-muted-foreground">Fonti attive:</span>
+          {sourceStats.map(s => (
+            <span key={s.source} className="inline-flex items-center gap-1">
+              <SourceBadge source={s.source} />
+              <span className="text-xs text-muted-foreground">({s.count})</span>
+              {s.error && <span className="text-xs text-destructive ml-1" title={s.error}>⚠</span>}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* ── Results Count ── */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {isLoading ? (
-            <span className="flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Caricamento...</span>
+            <span className="flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Caricamento…</span>
           ) : (
-            <><span className="font-semibold text-foreground">{data?.total?.toLocaleString("it-IT")}</span> gare trovate</>
+            <><span className="font-semibold text-foreground">{total.toLocaleString("it-IT")}</span> gare trovate</>
           )}
         </p>
         {totalPages > 1 && (
@@ -195,16 +470,20 @@ export function GareListClient() {
       </div>
 
       {/* ── Tender Cards ── */}
-      {data?.items?.length === 0 && !isLoading && (
+      {items.length === 0 && !isLoading && (
         <div className="text-center py-16 text-muted-foreground">
           <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
           <p className="text-lg font-medium">Nessuna gara trovata</p>
-          <p className="text-sm mt-1">Prova a modificare i filtri di ricerca</p>
+          <p className="text-sm mt-1">
+            {isAnacMode
+              ? "Prova a modificare i filtri o verifica la connessione con ANAC"
+              : "Prova a modificare i filtri di ricerca"}
+          </p>
         </div>
       )}
 
       <div className="space-y-4">
-        {(data?.items || []).map(tender => (
+        {items.map(tender => (
           <TenderCard key={tender.id} tender={tender} />
         ))}
       </div>
@@ -256,15 +535,19 @@ function getLotti(cig: CigLotto[] | string | null): CigLotto[] {
 }
 
 function TenderCard({ tender }: { tender: TenderItem }) {
-  const days = daysUntil(tender.data_scadenza)
-  const isActive = tender.stato === "active" || (days !== null && days > 0)
-  const cigCode = getCigCode(tender.cig)
-  const lotti = getLotti(tender.cig)
-  const sourceUrl = tender.link_originale ??
-    (tender.sources === "ted" ? `https://ted.europa.eu/it/notice/-/detail/${cigCode}` :
-      `https://www.get-cato.com/gara/${tender.id}`)
-  // tipo_contratto contains CPV codes in Cato data
-  const cpvCodes = tender.tipo_contratto ?? tender.descrizione_cpv
+  const days     = daysUntil(tender.data_scadenza)
+  const isActive = tender.stato === "active" || (days !== null && days > 0) || tender.sources === "anac"
+  const cigCode  = getCigCode(tender.cig)
+  const lotti    = getLotti(tender.cig)
+
+  const src = tender.sources as SourceKey
+  const sourceUrl = tender.link_originale ?? (
+    src === "ted"
+      ? `https://ted.europa.eu/it/notice/-/detail/${cigCode}`
+      : `https://www.get-cato.com/gara/${tender.id}`
+  )
+
+  const cpvCodes = tender.descrizione_cpv ?? tender.tipo_contratto
 
   return (
     <div className="border rounded-xl p-5 bg-card hover:shadow-md transition-shadow space-y-3">
@@ -275,14 +558,19 @@ function TenderCard({ tender }: { tender: TenderItem }) {
             ● ATTIVA
           </Badge>
         )}
+        {/* Badge fonte colorato */}
+        <SourceBadge source={tender.sources} />
         {cpvCodes && (
-          <Badge variant="outline" className="font-mono text-xs max-w-[240px] truncate">
-            {cpvCodes}
+          <Badge variant="outline" className="font-mono text-xs max-w-[240px] truncate" title={cpvCodes}>
+            CPV: {cpvCodes}
           </Badge>
         )}
-        <Badge variant="secondary" className="text-xs uppercase tracking-wide">
-          {tender.sources || "ANAC"}
-        </Badge>
+        {/* Badge PNRR (solo ANAC) */}
+        {(tender as NormalizedTender & { flag_pnrr_pnc?: string }).flag_pnrr_pnc === "Sì" && (
+          <Badge className="bg-amber-500/15 text-amber-700 border-amber-200 text-xs font-medium">
+            PNRR/PNC
+          </Badge>
+        )}
       </div>
 
       {/* Title */}
@@ -292,7 +580,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
         </h2>
       </a>
 
-      {/* CIG / Lotti */}
+      {/* CIG / Location */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
         {lotti.length > 1 ? (
           <span className="text-xs">
@@ -301,7 +589,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
             {lotti.length > 2 && ` +${lotti.length - 2}`}
           </span>
         ) : (
-          <span className="font-mono text-xs">Nr. Gara: {cigCode}</span>
+          <span className="font-mono text-xs">CIG: {cigCode}</span>
         )}
         {tender.provincia && (
           <span className="flex items-center gap-1">
@@ -328,8 +616,10 @@ function TenderCard({ tender }: { tender: TenderItem }) {
           </div>
         </div>
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Fonte</p>
-          <p className="font-medium text-sm uppercase">{tender.sources || "—"}</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Stazione appaltante</p>
+          <p className="font-medium text-sm truncate" title={tender.stazione_appaltante ?? undefined}>
+            {tender.stazione_appaltante ?? "—"}
+          </p>
         </div>
         <div>
           <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Pubblicato il</p>
@@ -341,7 +631,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
       <div className="flex items-center justify-between pt-1">
         <span className="text-xs text-muted-foreground flex items-center gap-1">
           <Building2 className="h-3 w-3" />
-          Stazione Appaltante &amp; Contatti
+          {tender.stazione_appaltante ?? "Stazione appaltante n.d."}
         </span>
         <a
           href={sourceUrl}

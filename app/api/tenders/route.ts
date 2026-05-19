@@ -1,96 +1,130 @@
 /**
- * /api/tenders — Proxy verso get-cato.com/api/tenders (API pubblica, no auth)
+ * GET /api/tenders — Aggregatore multi-fonte
  *
- * Parametri supportati (identici a Cato):
+ * Parametri:
  *   p        — pagina 0-based (default: 0)
- *   q        — ricerca full-text sull'oggetto
- *   tipo     — tipo procedura (Forniture, Servizi, Lavori, ...)
- *   importo  — fascia importo (< €40.000 | €40k – €150k | ...)
+ *   q        — ricerca full-text
+ *   tipo     — goods | services | works
+ *   importo  — fascia (< €40.000 | €40k – €150k | €150k – €1M | €1M – €5M | > €5M)
  *   scadenza — giorni alla scadenza (7 | 30 | 90)
+ *   source   — fonte specifica: ted | sintel | mepa | start_toscana |
+ *              halleyweb | place_vda | anac | cato
+ *              (può essere ripetuto più volte per multi-fonte)
  *
- * Il proxy aggiunge CORS e cache headers.
+ * Fan-out per fonte:
+ *   ted            → adapter TED Europa diretto (X-API-Key)
+ *   anac           → adapter ANAC diretto (BDNCP Superset / Dremio)
+ *   sintel         → Cato filtrato per sintel
+ *   mepa           → Cato filtrato per acquistinretepa
+ *   start_toscana  → Cato filtrato per start_toscana
+ *   halleyweb      → Cato filtrato per halleyweb
+ *   place_vda      → Cato filtrato per place_vda
+ *   cato / (vuoto) → Cato generico (tutte le fonti)
  */
 import { NextRequest, NextResponse } from "next/server"
+import { fetchTED }  from "@/lib/sources/ted"
+import { fetchCato } from "@/lib/sources/cato"
+import { fetchANAC } from "@/lib/sources/anac"
+import type { SourceKey, SourceResult } from "@/lib/sources/types"
 
-const CATO_BASE = "https://www.get-cato.com/api/tenders"
+// Mappa fonte → chiave Cato (parametro source nativo di Cato)
+const CATO_SOURCE_MAP: Partial<Record<SourceKey, string>> = {
+  sintel:        "sintel",
+  mepa:          "acquistinretepa",
+  start_toscana: "start_toscana",
+  halleyweb:     "halleyweb",
+  place_vda:     "place_vda",
+  cato:          "",  // vuoto = tutte le fonti Cato
+  // anac: usa fetchANAC diretto
+}
 
-// Fascia importo → parametri Cato (url-encoded)
-const IMPORTO_MAP: Record<string, string> = {
-  "< €40.000":   "< €40.000",
-  "€40k – €150k": "€40k – €150k",
-  "€150k – €1M": "€150k – €1M",
-  "€1M – €5M":   "€1M – €5M",
-  "> €5M":       "> €5M",
+async function resolveSource(
+  key: SourceKey,
+  commonParams: Parameters<typeof fetchCato>[0],
+  tedKey: string,
+): Promise<SourceResult> {
+  try {
+    if (key === "ted") {
+      return await fetchTED(commonParams, tedKey)
+    }
+
+    if (key === "anac") {
+      return await fetchANAC({
+        q:        commonParams.q,
+        page:     commonParams.page,
+        pageSize: commonParams.pageSize ?? 10,
+        tipo:     commonParams.tipo,
+        importo:  commonParams.importo,
+        inCorso:  true,   // usa BANDI_IN_CORSO (ds 81) — già filtrati per bandi aperti
+      })
+    }
+
+    const catoSrc = CATO_SOURCE_MAP[key]
+    if (catoSrc !== undefined) {
+      return await fetchCato({ ...commonParams, source: catoSrc || undefined }, key)
+    }
+
+    // Fonte sconosciuta → fallback Cato generico
+    return await fetchCato(commonParams, "cato")
+  } catch (err) {
+    return {
+      items:  [],
+      total:  0,
+      source: key,
+      error:  err instanceof Error ? err.message : String(err),
+    }
+  }
 }
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams
 
-  // Build Cato query string
-  const catoParams = new URLSearchParams()
-  catoParams.set("p", sp.get("p") ?? "0")
-  if (sp.get("q"))       catoParams.set("q", sp.get("q")!)
-  if (sp.get("tipo"))    catoParams.set("q", `${sp.get("q") ?? ""} ${sp.get("tipo")}`.trim())
-  if (sp.get("importo")) catoParams.set("importo", IMPORTO_MAP[sp.get("importo")!] ?? sp.get("importo")!)
-  if (sp.get("scadenza")) {
-    // Map days → Cato scadenza label
-    const scadenzaMap: Record<string, string> = { "7": "Entro 7 giorni", "30": "Entro 30 giorni", "90": "Entro 3 mesi" }
-    const label = scadenzaMap[sp.get("scadenza")!]
-    if (label) catoParams.set("scadenza", label)
-  }
+  const page     = parseInt(sp.get("p") ?? "0")
+  const q        = sp.get("q") ?? undefined
+  const tipo     = sp.get("tipo") ?? undefined
+  const importo  = sp.get("importo") ?? undefined
+  const scadenza = sp.get("scadenza") ?? undefined
 
-  const catoUrl = `${CATO_BASE}?${catoParams.toString()}`
+  // Multi-valore: ?source=ted&source=sintel
+  const rawSources = sp.getAll("source")
+  const sources: SourceKey[] = rawSources.length > 0
+    ? (rawSources as SourceKey[])
+    : ["cato"] // default: Cato generico (tutte le fonti)
 
-  try {
-    const res = await fetch(catoUrl, {
+  const tedKey = process.env.TED_API_KEY ?? ""
+
+  const commonParams = { q, page, importo, scadenza, tipo }
+
+  // Fan-out parallelo su tutte le fonti richieste
+  const results = await Promise.all(
+    sources.map(src => resolveSource(src, commonParams, tedKey)),
+  )
+
+  // Merge risultati (interleaved per fonte se multi-fonte, altrimenti lineare)
+  let allItems = results.flatMap(r => r.items)
+  const totalItems = results.reduce((acc, r) => acc + r.total, 0)
+  const errors = results.filter(r => r.error).map(r => ({ source: r.source, error: r.error }))
+
+  // De-duplication leggera per oggetto simile (stesso cig se disponibile)
+  const seen = new Set<string>()
+  allItems = allItems.filter(item => {
+    const key = item.cig ?? item.id
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  return NextResponse.json(
+    {
+      items:   allItems,
+      total:   totalItems,
+      sources: results.map(r => ({ source: r.source, count: r.items.length, error: r.error })),
+      ...(errors.length > 0 ? { errors } : {}),
+    },
+    {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json",
-        "Referer": "https://www.get-cato.com/gare",
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
       },
-      signal: AbortSignal.timeout(10_000),
-      next: { revalidate: 60 }, // cache 60s server-side
-    })
-
-    if (!res.ok) {
-      return NextResponse.json({ error: `Cato upstream: ${res.status}` }, { status: res.status })
-    }
-
-    const raw = await res.json()
-
-    // Normalize Cato response → our format
-    // Cato returns: { items: [...], total: number }
-    // Each item has: id, extracted_main_info (CIG, importo, scadenza, stazione), ...
-    const items = (raw.items ?? raw.data ?? []).map((item: Record<string, unknown>) => {
-      const info = (item.extracted_main_info as Record<string, unknown>) ?? {}
-      return {
-        id:                 item.id,
-        cig:                info.cig ?? item.cig ?? item.id,
-        oggetto:            item.title ?? item.oggetto_gara ?? item.oggetto ?? null,
-        importo:            parseFloat(String(info.importo ?? item.importo ?? 0)) || null,
-        stato:              item.status ?? item.stato ?? "active",
-        provincia:          info.provincia ?? item.provincia ?? null,
-        data_pubblicazione: item.created_at ?? item.data_pubblicazione ?? null,
-        data_scadenza:      info.data_scadenza ?? info.scadenza ?? item.data_scadenza_offerta ?? null,
-        tipo_contratto:     item.tipo_procedura ?? item.tipo_contratto ?? info.tipo ?? null,
-        descrizione_cpv:    (item.cpv_codes as string[] | undefined)?.join(", ") ?? item.descrizione_cpv ?? null,
-        sources:            item.source ?? "cato",
-        link_originale:     item.original_url ?? item.link_originale ?? null,
-      }
-    })
-
-    return NextResponse.json(
-      { items, total: raw.total ?? items.length },
-      {
-        headers: {
-          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
-        },
-      }
-    )
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Upstream error" },
-      { status: 502 }
-    )
-  }
+    },
+  )
 }

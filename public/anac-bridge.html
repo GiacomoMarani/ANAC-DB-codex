@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>ANAC Bridge — Connessione in corso…</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+    .card {
+      text-align: center;
+      padding: 2rem 3rem;
+      border-radius: 16px;
+      background: white;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+      max-width: 400px;
+    }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    p { color: #64748b; font-size: 0.875rem; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 1rem auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .success { color: #10b981; font-size: 2rem; }
+    .error   { color: #ef4444; }
+  </style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="spinner" id="spinner"></div>
+  <h1>Connessione ANAC in corso…</h1>
+  <p id="msg">Recupero dati di autenticazione dalla Banca Dati ANAC…</p>
+</div>
+
+<script>
+/**
+ * anac-bridge.html
+ *
+ * Questa pagina viene aperta come popup da /gare.
+ * Viene caricata come proxy attraverso Next.js (/anac-bridge.html),
+ * ma il redirect ci porta su dati.anticorruzione.it/…
+ *
+ * FLUSSO:
+ * 1. /gare apre: window.open('https://dati.anticorruzione.it/superset/...')
+ *    → MA questa è una pagina separata che non esegue i nostri script.
+ *
+ * 2. Alternativa: /gare apre window.open('/anac-relay')
+ *    → La pagina /anac-relay fa fetch a dati.anticorruzione.it
+ *    → CORS blocca perché siamo su localhost
+ *
+ * SOLUZIONE REALE: questa pagina è hostata su localhost:3000 ma viene
+ * REDIRETTATA verso dati.anticorruzione.it da ANAC stesso.
+ * Quando arriviamo su dati.anticorruzione.it, non possiamo più
+ * comunicare con il parent su localhost (cross-origin block).
+ *
+ * SOLUZIONE FINALE IMPLEMENTATA:
+ * Invece di aprire un popup, la pagina /gare inietta uno script
+ * tramite HTTPS fetch della pagina ANAC... impossibile (CORS).
+ *
+ * L'UNICA cosa che funziona è che l'utente esegua il console script
+ * manualmente su dati.anticorruzione.it, oppure installi un'estensione.
+ *
+ * Questa pagina è un placeholder che mostra le istruzioni.
+ */
+(async function() {
+  const card = document.getElementById('card');
+  const msg  = document.getElementById('msg');
+  const spin = document.getElementById('spinner');
+
+  // Controlla se siamo su dati.anticorruzione.it (redirect avvenuto)
+  const isOnAnac = window.location.hostname === 'dati.anticorruzione.it';
+
+  if (isOnAnac) {
+    msg.textContent = 'Connessione a ANAC rilevata! Recupero token…';
+
+    try {
+      // Recupera il CSRF token (same-origin su ANAC)
+      const csrfRes = await fetch('/api/v1/security/csrf_token/', {
+        headers: { Accept: 'application/json' },
+        credentials: 'include'
+      });
+      const { result: csrf } = await csrfRes.json();
+
+      if (!csrf) throw new Error('CSRF token non trovato');
+
+      msg.textContent = 'Token recuperato. Invio all\'applicazione…';
+
+      // Invia il token all'app tramite postMessage al parent
+      if (window.opener) {
+        window.opener.postMessage({ type: 'anac-csrf', csrf }, 'http://localhost:3000');
+        msg.textContent = 'Token inviato con successo! Torna all\'applicazione.';
+
+        // Anche via fetch direttamente
+        await fetch('http://localhost:3000/api/anac-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csrf, cookies: document.cookie })
+        }).catch(() => {});
+
+        // Chiudi il popup dopo 2 secondi
+        spin.style.display = 'none';
+        card.innerHTML = '<div class="success">✅</div><h1>Connesso!</h1><p>Torna alla pagina Gare e clicca "Aggiorna".<br><br>Questa finestra si chiuderà automaticamente.</p>';
+        setTimeout(() => window.close(), 2000);
+      } else {
+        // Siamo su una pagina ANAC normale, non in popup
+        card.innerHTML = '<div class="success">✅</div><h1>Token ottenuto!</h1><p>Invia il token all\'applicazione…</p>';
+        await fetch('http://localhost:3000/api/anac-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csrf })
+        });
+        card.innerHTML = '<div class="success">✅</div><h1>Connesso!</h1><p>Torna su <a href="http://localhost:3000/gare">localhost:3000/gare</a> e clicca "Aggiorna".</p>';
+        spin.style.display = 'none';
+      }
+    } catch (err) {
+      spin.style.display = 'none';
+      card.innerHTML = '<h1 class="error">❌ Errore</h1><p>' + err.message + '</p>';
+    }
+  } else {
+    // Siamo su localhost — redirect verso ANAC con questa stessa pagina come redirect_uri
+    msg.textContent = 'Apertura portale ANAC…';
+    // Non possiamo fare redirect perché perdiamo il contesto della pagina
+    card.innerHTML = `
+      <div class="success">🔌</div>
+      <h1>Connetti ANAC</h1>
+      <p>Apri la console del browser (F12) su <strong>dati.anticorruzione.it</strong> e incolla lo script fornito nell'applicazione.</p>
+    `;
+    spin.style.display = 'none';
+  }
+})();
+</script>
+</body>
+</html>
