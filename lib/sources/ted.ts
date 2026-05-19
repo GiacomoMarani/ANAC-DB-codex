@@ -135,9 +135,9 @@ export async function fetchTED(
       const today    = new Date()
       const deadline = new Date()
       deadline.setDate(today.getDate() + days)
-      const todayStr    = today.toISOString().split("T")[0]
-      const deadlineStr = deadline.toISOString().split("T")[0]
-      // deadline-date-lot è il campo valido per TED API v3 (submission-deadline non esiste)
+      // TED v3 usa formato data YYYYMMDD (senza trattini)
+      const todayStr    = today.toISOString().split("T")[0].replace(/-/g, "")
+      const deadlineStr = deadline.toISOString().split("T")[0].replace(/-/g, "")
       clauses.push(`deadline-date-lot>=${todayStr}`)
       clauses.push(`deadline-date-lot<=${deadlineStr}`)
     }
@@ -147,21 +147,27 @@ export async function fetchTED(
   if (importoRange?.gte != null) clauses.push(`total-value>=${importoRange.gte}`)
   if (importoRange?.lte != null) clauses.push(`total-value<=${importoRange.lte}`)
 
-  // Filtro automatico per recency: ultime 12 mesi
-  // (TED v3 NON supporta sort — filtriamo per data per ottenere bandi recenti)
+  // Filtro automatico per recency: ultimi 12 mesi
+  // TED v3 usa formato data YYYYMMDD (senza trattini) nelle query expert
   const oneYearAgo = new Date()
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
-  clauses.push(`publication-date>=${oneYearAgo.toISOString().split("T")[0]}`)
+  const dateFilter = oneYearAgo.toISOString().split("T")[0].replace(/-/g, "")
+  clauses.push(`publication-date>=${dateFilter}`)
 
-  // Testo libero + clausole
-  // NOTA: NON usare parentesi intorno al testo libero — causano errore di sintassi
+  // Testo libero: usa ~ (contains) su campi titolo multipli
+  // NON usare parole senza campo (es: "lavori AND ...") — errore di sintassi TED
+  const textClause = q
+    ? `(title-lot~${q} OR notice-title~${q} OR announcement-title~${q})`
+    : null
+
   const expertQuery = [
-    ...(q ? [q] : []),
+    ...(textClause ? [textClause] : []),
     ...clauses,
   ].join(" AND ")
 
+  const defaultDate = new Date(Date.now() - 365*86400000).toISOString().split("T")[0].replace(/-/g, "")
   const body = {
-    query:  expertQuery || `buyer-country=ITA AND publication-date>=${new Date(Date.now() - 365*86400000).toISOString().split("T")[0]}`,
+    query:  expertQuery || `buyer-country=ITA AND publication-date>=${defaultDate}`,
     // Solo campi validi per TED API v3 (sort non è supportato)
     fields: [
       "publication-number",
