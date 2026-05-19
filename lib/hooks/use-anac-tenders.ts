@@ -4,27 +4,24 @@
  * Hook React client-side per interrogare BDNCP ANAC in tempo reale.
  *
  * ╔══════════════════════════════════════════════════════════════════╗
- * ║  ARCHITETTURA: Console Script Relay (Soluzione 3)               ║
+ * ║  ARCHITETTURA: Playwright Auto-Fetch (Soluzione automatica)     ║
  * ╠══════════════════════════════════════════════════════════════════╣
  * ║                                                                  ║
- * ║  Il WAF F5 di ANAC blocca le chiamate server-to-server.          ║
- * ║  CORS blocca le chiamate browser cross-origin da localhost.      ║
+ * ║  FLUSSO AUTOMATICO:                                             ║
+ * ║  1. Hook chiama POST /api/anac-fetch-now {key, params}          ║
+ * ║  2. Il server avvia Playwright (Chromium headless)              ║
+ * ║  3. Playwright naviga su ANAC, ottiene CSRF, fa la query        ║
+ * ║  4. I risultati vengono salvati in /api/anac-data               ║
+ * ║  5. Hook polling su /api/anac-data?key= ogni 3s                 ║
+ * ║  6. Quando i dati arrivano: mostra i bandi, stato "Live"        ║
  * ║                                                                  ║
- * ║  SOLUZIONE: il console script su dati.anticorruzione.it fa        ║
- * ║  le chiamate API (same-origin) e invia i dati JSON all'app.     ║
+ * ║  FALLBACK (se Playwright non disponibile / errore):             ║
+ * ║  Mostra istruzioni per il console script manuale                ║
+ * ║  (Soluzione 3 originale)                                        ║
  * ║                                                                  ║
- * ║  FLUSSO:                                                         ║
- * ║  1. L'hook pubblica la "richiesta" corrente (filtri + pagina)   ║
- * ║     in /api/anac-request (GET-polling dal console script).       ║
- * ║  2. Il console script (sempre in esecuzione su ANAC) legge la   ║
- * ║     richiesta ogni 2s, fa la query ANAC, invia i dati a          ║
- * ║     POST /api/anac-data.                                         ║
- * ║  3. L'hook legge i dati da GET /api/anac-data?key=...            ║
- * ║                                                                  ║
- * ║  SEMPLIFICATO (per il primo avvio):                              ║
- * ║  Il console script viene eseguito manualmente ONCE dall'utente   ║
- * ║  e rimane in loop, aggiornando i dati ogni volta che l'hook      ║
- * ║  cambia i parametri.                                             ║
+ * ║  PERCHÉ PLAYWRIGHT BYPASSA IL WAF:                              ║
+ * ║  Usa il vero motore Chromium → TLS fingerprint (JA3/JA4)        ║
+ * ║  identico a Chrome reale → il WAF non può distinguerlo          ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
@@ -38,13 +35,13 @@ import type { NormalizedTender }                      from "@/lib/sources/types"
 
 export function anacParamsKey(p: AnacFetchParams): string {
   const parts = [
-    `p${p.page ?? 0}`,
+    `p${p.page     ?? 0}`,
     `ps${p.pageSize ?? 10}`,
     p.q        ? `q=${encodeURIComponent(p.q).slice(0, 30)}`  : "",
-    p.tipo     ? `t=${p.tipo}`     : "",
-    p.importo  ? `i=${p.importo}`  : "",
+    p.tipo     ? `t=${p.tipo}`      : "",
+    p.importo  ? `i=${p.importo}`   : "",
     p.provincia ? `pr=${p.provincia}` : "",
-    p.inCorso  ? "ic=1" : "",
+    p.inCorso  ? "ic=1"             : "",
   ].filter(Boolean)
   return parts.join("|")
 }
@@ -52,40 +49,38 @@ export function anacParamsKey(p: AnacFetchParams): string {
 // ── Stato dell'hook ───────────────────────────────────────────────────────────
 
 export interface AnacTendersState {
-  items:      NormalizedTender[]
-  total:      number
-  isLoading:  boolean
-  error:      string | null
-  isLive:     boolean
-  /** Quanti secondi fa i dati sono stati ricevuti dal console script */
-  dataAge?:   number
-  /** La chiave params corrente — usata dal console script per sapere cosa fetchare */
-  currentKey: string
+  items:         NormalizedTender[]
+  total:         number
+  isLoading:     boolean
+  error:         string | null
+  isLive:        boolean
+  /** Quanti secondi fa i dati sono stati ricevuti */
+  dataAge?:      number
+  /** Se true, Playwright non è disponibile — mostra istruzioni manuali */
+  needsManual:   boolean
+  currentKey:    string
 }
 
-// ── Polling del data-store ────────────────────────────────────────────────────
+// ── Lettura dal data store ────────────────────────────────────────────────────
 
-const POLL_INTERVAL = 3_000   // ogni 3s controlla se ci sono dati freschi
-const DATA_MAX_AGE  = 9 * 60  // considera stale i dati > 9 minuti
+const DATA_MAX_AGE = 9 * 60  // considera stale dopo 9 minuti
 
-async function fetchCachedData(
+async function readDataStore(
   key: string,
 ): Promise<{ items: NormalizedTender[]; total: number; age: number } | null> {
   try {
     const res = await fetch(`/api/anac-data?key=${encodeURIComponent(key)}`, {
-      headers: { Accept: "application/json" },
-      signal:  AbortSignal.timeout(4_000),
+      signal: AbortSignal.timeout(4_000),
     })
-    if (res.status === 404) return null   // nessun dato per questa key
+    if (res.status === 404) return null
     if (!res.ok)            return null
 
     const data = await res.json() as {
-      items?:   NormalizedTender[]
-      total?:   number
-      age?:     number
-      stale?:   boolean
+      items?:  NormalizedTender[]
+      total?:  number
+      age?:    number
+      stale?:  boolean
     }
-
     if (data.stale || !data.items?.length) return null
 
     return {
@@ -98,7 +93,44 @@ async function fetchCachedData(
   }
 }
 
+// ── Trigger Playwright fetch ──────────────────────────────────────────────────
+
+async function triggerPlaywrightFetch(
+  key: string,
+  params: AnacFetchParams,
+): Promise<{ ok: boolean; queued?: boolean; fallback?: boolean }> {
+  try {
+    const res = await fetch("/api/anac-fetch-now", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ key, params }),
+      signal:  AbortSignal.timeout(60_000),   // Playwright può richiedere fino a 60s
+    })
+
+    if (res.status === 202) return { ok: true, queued: true }   // già in volo
+
+    const data = await res.json() as {
+      ok?:       boolean
+      queued?:   boolean
+      fallback?: boolean
+      error?:    string
+    }
+
+    if (!res.ok) {
+      console.warn("[ANAC-HOOK] Playwright fetch failed:", data.error)
+      return { ok: false, fallback: data.fallback ?? true }
+    }
+
+    return { ok: true }
+  } catch (err) {
+    console.warn("[ANAC-HOOK] Trigger error:", err)
+    return { ok: false, fallback: true }
+  }
+}
+
 // ── Hook principale ───────────────────────────────────────────────────────────
+
+const POLL_INTERVAL = 3_000
 
 export function useAnacTenders(
   params: AnacFetchParams,
@@ -107,104 +139,139 @@ export function useAnacTenders(
   const key = anacParamsKey(params)
 
   const [state, setState] = useState<AnacTendersState>({
-    items:      [],
-    total:      0,
-    isLoading:  params.pageSize !== 0,
-    error:      null,
-    isLive:     false,
-    currentKey: key,
+    items:       [],
+    total:       0,
+    isLoading:   params.pageSize !== 0,
+    error:       null,
+    isLive:      false,
+    needsManual: false,
+    currentKey:  key,
   })
 
-  const pollRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
   }, [])
 
-  const checkData = useCallback(async (k: string, isRetry = false) => {
+  // ── Fetch completo (trigger + polling) ─────────────────────────────────────
+  const doFetch = useCallback(async (k: string, p: AnacFetchParams) => {
     if (!mountedRef.current) return
 
-    const cached = await fetchCachedData(k)
+    stopPolling()
+    setState(s => ({
+      ...s,
+      isLoading:   true,
+      error:       null,
+      isLive:      false,
+      needsManual: false,
+      currentKey:  k,
+    }))
 
-    if (!mountedRef.current) return
-
+    // 1. Controlla se ci sono già dati freschi nel store
+    const cached = await readDataStore(k)
     if (cached && cached.age <= DATA_MAX_AGE) {
-      // Dati trovati e freschi
+      if (!mountedRef.current) return
       stopPolling()
       setState(s => ({
         ...s,
         items:      cached.items,
         total:      cached.total,
         isLoading:  false,
-        error:      null,
         isLive:     true,
         dataAge:    cached.age,
         currentKey: k,
       }))
-    } else if (isRetry) {
-      // Siamo in polling — nessun dato ancora, mantieni lo spinner
-      if (!state.isLive) {
-        setState(s => ({
-          ...s,
-          isLoading:  true,
-          error:      null,
-          currentKey: k,
-        }))
-      }
-    }
-  }, [state.isLive, stopPolling])
-
-  const startPolling = useCallback((k: string, p: AnacFetchParams) => {
-    stopPolling()
-    setState(s => ({ ...s, isLoading: true, error: null, isLive: false, currentKey: k }))
-
-    // Pubblica i params correnti così il console script sa cosa fetchare
-    fetch("/api/anac-request", {
-      method:  "PUT",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ key: k, params: p }),
-    }).catch(() => {/* non bloccante */})
-
-    // Check immediato
-    checkData(k, false)
-
-    // Poi polling ogni 3s
-    pollRef.current = setInterval(() => checkData(k, true), POLL_INTERVAL)
-
-    // Timeout dopo 90s senza dati
-    setTimeout(() => {
-      if (pollRef.current) {
-        stopPolling()
-        setState(s => {
-          if (!s.isLive) {
-            return {
-              ...s,
-              isLoading: false,
-              error:     "Nessun dato ricevuto in 90 secondi. Esegui il console script su dati.anticorruzione.it.",
-              currentKey: k,
-            }
-          }
-          return s
-        })
-      }
-    }, 90_000)
-  }, [checkData, stopPolling])
-
-  // Quando i params cambiano — reset e riparti
-  const prevKeyRef = useRef<string>("")
-
-  useEffect(() => {
-    if (params.pageSize === 0) {
-      stopPolling()
       return
     }
 
+    // 2. Trigger Playwright fetch asincrono
+    const trigger = await triggerPlaywrightFetch(k, p)
+    if (!mountedRef.current) return
+
+    if (trigger.fallback) {
+      // Playwright non disponibile — mostra istruzioni manuali
+      setState(s => ({
+        ...s,
+        isLoading:   false,
+        needsManual: true,
+        error:       null,
+        currentKey:  k,
+      }))
+
+      // Pubblica i params per il console script manuale
+      fetch("/api/anac-request", {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ key: k, params: p }),
+      }).catch(() => {/* non bloccante */})
+
+      // Polling in attesa che il console script invii i dati
+      pollRef.current = setInterval(async () => {
+        const data = await readDataStore(k)
+        if (data && mountedRef.current) {
+          stopPolling()
+          setState(s => ({
+            ...s,
+            items:       data.items,
+            total:       data.total,
+            isLoading:   false,
+            isLive:      true,
+            needsManual: false,
+            dataAge:     data.age,
+            currentKey:  k,
+          }))
+        }
+      }, POLL_INTERVAL)
+
+      return
+    }
+
+    // 3. Playwright triggerato — polling per i risultati
+    pollRef.current = setInterval(async () => {
+      const data = await readDataStore(k)
+      if (data && mountedRef.current) {
+        stopPolling()
+        setState(s => ({
+          ...s,
+          items:      data.items,
+          total:      data.total,
+          isLoading:  false,
+          isLive:     true,
+          needsManual: false,
+          dataAge:    data.age,
+          currentKey: k,
+        }))
+      }
+    }, POLL_INTERVAL)
+
+    // Timeout: 90s senza dati
+    setTimeout(() => {
+      if (!pollRef.current) return   // già risolto
+      stopPolling()
+      if (!mountedRef.current) return
+      setState(s => ({
+        ...s,
+        isLoading:   false,
+        needsManual: true,   // fallback al console script
+        error:       "Timeout automatico — usa il relay manuale come alternativa.",
+        currentKey:  k,
+      }))
+    }, 90_000)
+
+  }, [stopPolling])
+
+  // ── Effect: nuovi params ────────────────────────────────────────────────────
+  const prevKeyRef = useRef<string>("")
+
+  useEffect(() => {
+    if (params.pageSize === 0) { stopPolling(); return }
     if (key === prevKeyRef.current) return
     prevKeyRef.current = key
-
-    startPolling(key, params)
-  }, [key, params.pageSize, startPolling, stopPolling])
+    doFetch(key, params)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, params.pageSize])
 
   useEffect(() => {
     mountedRef.current = true
@@ -215,9 +282,10 @@ export function useAnacTenders(
   }, [stopPolling])
 
   const refetch = useCallback(() => {
-    setState(s => ({ ...s, items: [], total: 0, isLive: false, error: null }))
-    startPolling(key, params)
-  }, [key, params, startPolling])
+    setState(s => ({ ...s, items: [], total: 0, isLive: false, error: null, needsManual: false }))
+    doFetch(key, params)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, params, doFetch])
 
   return { ...state, refetch }
 }

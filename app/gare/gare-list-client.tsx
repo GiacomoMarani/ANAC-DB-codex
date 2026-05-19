@@ -123,7 +123,6 @@ function AnacLivePanel({
   onRetry: () => void
 }) {
   const [copied, setCopied] = useState(false)
-  const isWaiting = anac.isLoading && !anac.error
 
   const handleCopy = async () => {
     try {
@@ -151,22 +150,26 @@ function AnacLivePanel({
               <Wifi className="h-3 w-3" /> Live
               {typeof anac.dataAge === "number" && (
                 <span className="text-emerald-500/70 ml-0.5">
-                  · {anac.dataAge}s fa
+                  · {anac.dataAge < 60
+                      ? `${anac.dataAge}s fa`
+                      : `${Math.floor(anac.dataAge / 60)}m fa`}
                 </span>
               )}
             </span>
           )}
 
-          {isWaiting && (
+          {/* Auto-fetch in corso */}
+          {anac.isLoading && !anac.needsManual && (
             <span className="inline-flex items-center gap-1 text-xs text-indigo-500 font-medium">
               <Loader2 className="h-3 w-3 animate-spin" />
-              Attendo dati dal relay…
+              Caricamento automatico…
             </span>
           )}
 
-          {anac.error && (
-            <span className="inline-flex items-center gap-1 text-xs text-rose-600 font-medium">
-              <WifiOff className="h-3 w-3" /> Non connesso
+          {/* Fallback manuale attivo */}
+          {anac.needsManual && !anac.isLive && (
+            <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+              <WifiOff className="h-3 w-3" /> Relay manuale richiesto
             </span>
           )}
         </div>
@@ -176,89 +179,83 @@ function AnacLivePanel({
           size="sm"
           className="h-7 px-2 text-indigo-600 hover:text-indigo-800 shrink-0"
           onClick={onRetry}
-          disabled={anac.isLoading}
+          disabled={anac.isLoading && !anac.needsManual}
         >
-          <RefreshCw className={`h-3.5 w-3.5 mr-1 ${anac.isLoading ? "animate-spin" : ""}`} />
-          Riavvia
+          <RefreshCw className={`h-3.5 w-3.5 mr-1 ${anac.isLoading && !anac.needsManual ? "animate-spin" : ""}`} />
+          Ricarica
         </Button>
       </div>
 
-      {/* ── Istruzioni console script (mostrate quando non è live) ── */}
-      {!anac.isLive && (
-        <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2.5">
+      {/* ── Spinner auto-fetch (nessun manuale richiesto) ── */}
+      {anac.isLoading && !anac.needsManual && !anac.isLive && (
+        <div className="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg px-3 py-2.5 border border-indigo-100 dark:border-indigo-900">
+          <Loader2 className="h-4 w-4 animate-spin text-indigo-500 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">
+              Chromium headless in connessione a ANAC…
+            </p>
+            <p className="text-[10px] text-indigo-500/70 mt-0.5">
+              Prima connessione: ~10-20 secondi. Successivi ricaricamenti saranno istantanei.
+            </p>
+          </div>
+        </div>
+      )}
 
-          {/* Errore timeout */}
+      {/* ── Fallback: relay manuale ── */}
+      {anac.needsManual && !anac.isLive && (
+        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3 space-y-2.5">
           {anac.error && (
-            <div className="text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded px-2 py-1 border border-rose-200 dark:border-rose-800">
+            <div className="text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded px-2 py-1 border border-rose-200">
               {anac.error}
             </div>
           )}
 
-          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-            🔌 Attiva il relay ANAC (una volta sola)
+          <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+            ⚡ Playwright non disponibile — usa il relay manuale (3 passi)
           </p>
 
-          <ol className="text-xs text-slate-600 dark:text-slate-400 space-y-1 list-decimal list-inside leading-relaxed">
+          <ol className="text-xs text-amber-700 dark:text-amber-300 space-y-0.5 list-decimal list-inside">
             <li>
               Apri{" "}
               <a
                 href="https://dati.anticorruzione.it/superset/dashboard/appalti/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-indigo-600 underline font-medium"
+                className="underline font-medium"
               >
                 dati.anticorruzione.it
               </a>
-              {" "}(aspetta che carichi la dashboard)
             </li>
-            <li>
-              Premi{" "}
-              <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 font-mono text-[10px]">F12</kbd>
-              {" "}→ tab <strong>Console</strong>
-            </li>
-            <li>Clicca il pulsante qui sotto per copiare lo script, incollalo e premi Invio</li>
+            <li>Premi <kbd className="px-1 py-0.5 rounded bg-amber-100 border border-amber-300 font-mono text-[10px]">F12</kbd> → Console</li>
+            <li>Incolla lo script e premi Invio (si aggiorna in automatico)</li>
           </ol>
 
-          {/* Pulsante copia */}
-          <div className="flex items-center gap-3">
-            <Button
-              size="sm"
-              className={`h-8 px-4 text-xs font-semibold transition-all ${
-                copied
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  : "bg-indigo-600 hover:bg-indigo-700 text-white"
-              }`}
-              onClick={handleCopy}
-            >
-              {copied
-                ? <><span className="mr-1">✓</span> Copiato!</>
-                : <><span className="mr-1">📋</span> Copia script relay</>
-              }
-            </Button>
-
-            {isWaiting && (
-              <span className="text-xs text-slate-500 italic">
-                In attesa che il relay invii i dati…
-              </span>
-            )}
-          </div>
-
-          <p className="text-[10px] text-slate-400 leading-relaxed">
-            Lo script rimane attivo in background e aggiorna automaticamente i bandi
-            quando cambi filtri o pagina. Fermalo con <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">window._anacRelay.stop()</code>
-          </p>
+          <Button
+            size="sm"
+            className={`h-8 px-4 text-xs font-semibold transition-all ${
+              copied
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                : "bg-indigo-600 hover:bg-indigo-700 text-white"
+            }`}
+            onClick={handleCopy}
+          >
+            {copied ? "✓ Copiato!" : "📋 Copia script relay"}
+          </Button>
         </div>
       )}
 
-      {/* ── Stato OK ── */}
+      {/* ── Stato Live ── */}
       {anac.isLive && (
         <p className="text-xs text-indigo-600/70">
           <span className="font-semibold">{anac.total.toLocaleString("it-IT")}</span>{" "}
-          bandi in corso · Fonte: BDNCP — Banca Dati Nazionale Contratti Pubblici (ANAC)
-          {typeof anac.dataAge === "number" && anac.dataAge > 60 && (
-            <span className="ml-2 text-amber-500">
-              · aggiornato {Math.floor(anac.dataAge / 60)}m fa
-            </span>
+          bandi in corso · BDNCP — Autorità Nazionale Anticorruzione
+          {typeof anac.dataAge === "number" && anac.dataAge > 300 && (
+            <button
+              onClick={onRetry}
+              className="ml-2 text-amber-500 underline hover:text-amber-600 text-[10px]"
+            >
+              aggiorna
+            </button>
           )}
         </p>
       )}
