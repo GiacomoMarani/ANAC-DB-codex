@@ -122,15 +122,20 @@ function AnacLivePanel({
   anac: ReturnType<typeof useAnacTenders>
   onRetry: () => void
 }) {
-  const [copied, setCopied] = useState(false)
+  const [copied,       setCopied]       = useState(false)
+  const [showConsole,  setShowConsole]  = useState(false)
 
-  const handleCopy = async () => {
+  const scriptUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/anac-relay.user.js`
+    : "/anac-relay.user.js"
+
+  const handleCopyScript = async () => {
     try {
       await navigator.clipboard.writeText(ANAC_CONSOLE_SCRIPT_MINI)
       setCopied(true)
       setTimeout(() => setCopied(false), 2_500)
     } catch {
-      window.prompt("Copia questo script e incollalo nella console ANAC (F12):", ANAC_CONSOLE_SCRIPT_MINI)
+      window.prompt("Copia script:", ANAC_CONSOLE_SCRIPT_MINI)
     }
   }
 
@@ -158,18 +163,15 @@ function AnacLivePanel({
             </span>
           )}
 
-          {/* Auto-fetch in corso */}
           {anac.isLoading && !anac.needsManual && (
             <span className="inline-flex items-center gap-1 text-xs text-indigo-500 font-medium">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Caricamento automatico…
+              <Loader2 className="h-3 w-3 animate-spin" /> Connessione…
             </span>
           )}
 
-          {/* Fallback manuale attivo */}
           {anac.needsManual && !anac.isLive && (
             <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
-              <WifiOff className="h-3 w-3" /> Relay manuale richiesto
+              <WifiOff className="h-3 w-3" /> Relay richiesto
             </span>
           )}
         </div>
@@ -186,61 +188,89 @@ function AnacLivePanel({
         </Button>
       </div>
 
-      {/* ── Spinner auto-fetch (nessun manuale richiesto) ── */}
-      {anac.isLoading && !anac.needsManual && !anac.isLive && (
-        <div className="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg px-3 py-2.5 border border-indigo-100 dark:border-indigo-900">
-          <Loader2 className="h-4 w-4 animate-spin text-indigo-500 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">
-              Chromium headless in connessione a ANAC…
-            </p>
-            <p className="text-[10px] text-indigo-500/70 mt-0.5">
-              Prima connessione: ~10-20 secondi. Successivi ricaricamenti saranno istantanei.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* ── Setup relay (solo quando non live) ── */}
+      {!anac.isLive && (anac.needsManual || anac.isLoading) && (
+        <div className="space-y-2.5">
 
-      {/* ── Fallback: relay manuale ── */}
-      {anac.needsManual && !anac.isLive && (
-        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3 space-y-2.5">
-          {anac.error && (
-            <div className="text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded px-2 py-1 border border-rose-200">
-              {anac.error}
+          {/* ── OPZIONE A: Userscript (raccomandata) ── */}
+          <div className="bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">A</span>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                  Relay automatico via Tampermonkey <span className="text-indigo-500 font-normal">(consigliato — una volta sola)</span>
+                </p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Lo script gira in background ogni volta che ANAC è aperta. Zero azioni manuali.
+                </p>
+              </div>
             </div>
-          )}
 
-          <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
-            ⚡ Playwright non disponibile — usa il relay manuale (3 passi)
-          </p>
+            <ol className="text-xs text-slate-600 dark:text-slate-400 space-y-1 list-decimal list-inside ml-6">
+              <li>
+                Installa{" "}
+                <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener noreferrer"
+                   className="text-indigo-600 underline font-medium">
+                  Tampermonkey
+                </a>
+                {" "}(estensione Chrome/Firefox, gratuita)
+              </li>
+              <li>
+                <a href={scriptUrl} target="_blank" rel="noopener noreferrer"
+                   className="inline-flex items-center gap-1 text-indigo-600 underline font-medium">
+                  <ExternalLink className="h-2.5 w-2.5" />
+                  Clicca qui per installare lo script relay
+                </a>
+                {" "}→ conferma in Tampermonkey
+              </li>
+              <li>
+                Apri{" "}
+                <a href="https://dati.anticorruzione.it/superset/dashboard/appalti/"
+                   target="_blank" rel="noopener noreferrer"
+                   className="text-indigo-600 underline font-medium">
+                  dati.anticorruzione.it
+                </a>
+                {" "}— lo script parte da solo ✓
+              </li>
+            </ol>
+          </div>
 
-          <ol className="text-xs text-amber-700 dark:text-amber-300 space-y-0.5 list-decimal list-inside">
-            <li>
-              Apri{" "}
-              <a
-                href="https://dati.anticorruzione.it/superset/dashboard/appalti/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline font-medium"
-              >
-                dati.anticorruzione.it
-              </a>
-            </li>
-            <li>Premi <kbd className="px-1 py-0.5 rounded bg-amber-100 border border-amber-300 font-mono text-[10px]">F12</kbd> → Console</li>
-            <li>Incolla lo script e premi Invio (si aggiorna in automatico)</li>
-          </ol>
+          {/* ── OPZIONE B: Console script (fallback) ── */}
+          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+            <button
+              className="w-full flex items-center justify-between px-3 py-2 text-left bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+              onClick={() => setShowConsole(v => !v)}
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-400 text-white text-[10px] font-bold flex items-center justify-center">B</span>
+                <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                  Relay manuale via console (alternativa senza estensione)
+                </span>
+              </div>
+              <ChevronRight className={`h-3.5 w-3.5 text-slate-400 transition-transform ${showConsole ? "rotate-90" : ""}`} />
+            </button>
 
-          <Button
-            size="sm"
-            className={`h-8 px-4 text-xs font-semibold transition-all ${
-              copied
-                ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                : "bg-indigo-600 hover:bg-indigo-700 text-white"
-            }`}
-            onClick={handleCopy}
-          >
-            {copied ? "✓ Copiato!" : "📋 Copia script relay"}
-          </Button>
+            {showConsole && (
+              <div className="px-3 pb-3 pt-2 space-y-2 bg-slate-50/50 dark:bg-slate-900/30">
+                <ol className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5 list-decimal list-inside">
+                  <li>Apri <a href="https://dati.anticorruzione.it/superset/dashboard/appalti/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">dati.anticorruzione.it</a></li>
+                  <li>Premi <kbd className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono text-[10px] border border-slate-300">F12</kbd> → tab Console</li>
+                  <li>Incolla lo script e premi Invio</li>
+                </ol>
+                <Button
+                  size="sm"
+                  className={`h-7 px-3 text-xs font-semibold transition-all ${
+                    copied
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "bg-slate-700 hover:bg-slate-800 text-white"
+                  }`}
+                  onClick={handleCopyScript}
+                >
+                  {copied ? "✓ Copiato!" : "📋 Copia script console"}
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -250,10 +280,7 @@ function AnacLivePanel({
           <span className="font-semibold">{anac.total.toLocaleString("it-IT")}</span>{" "}
           bandi in corso · BDNCP — Autorità Nazionale Anticorruzione
           {typeof anac.dataAge === "number" && anac.dataAge > 300 && (
-            <button
-              onClick={onRetry}
-              className="ml-2 text-amber-500 underline hover:text-amber-600 text-[10px]"
-            >
+            <button onClick={onRetry} className="ml-2 text-amber-500 underline hover:text-amber-600 text-[10px]">
               aggiorna
             </button>
           )}
