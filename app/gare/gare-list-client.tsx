@@ -5,7 +5,7 @@ import useSWR from "swr"
 import {
   Search, SlidersHorizontal, ChevronLeft, ChevronRight,
   ExternalLink, Clock, Euro, Building2, MapPin, FileText, Loader2,
-  Globe, Wifi, WifiOff, RefreshCw, ShieldCheck,
+  Globe, ShieldCheck, Database,
 } from "lucide-react"
 import { Button }  from "@/components/ui/button"
 import { Input }   from "@/components/ui/input"
@@ -15,10 +15,7 @@ import {
 } from "@/components/ui/select"
 import type { SourceKey } from "@/lib/sources/types"
 import { SOURCE_LABELS, SOURCE_COLORS } from "@/lib/sources/types"
-import { useAnacTenders } from "@/lib/hooks/use-anac-tenders"
-import type { AnacFetchParams } from "@/lib/sources/anac"
 import type { NormalizedTender } from "@/lib/sources/types"
-import { ANAC_CONSOLE_SCRIPT_MINI } from "@/lib/anac-console-script"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,176 +111,24 @@ function SourceBadge({ source }: { source: string }) {
   )
 }
 
-// ─── ANAC Live Panel ──────────────────────────────────────────────────────────
+// ─── ANAC Supabase Panel ──────────────────────────────────────────────────────
 
-function AnacLivePanel({
-  anac, onRetry,
-}: {
-  anac: ReturnType<typeof useAnacTenders>
-  onRetry: () => void
-}) {
-  const [copied,       setCopied]       = useState(false)
-  const [showConsole,  setShowConsole]  = useState(false)
-
-  const scriptUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/anac-relay.user.js`
-    : "/anac-relay.user.js"
-
-  const handleCopyScript = async () => {
-    try {
-      await navigator.clipboard.writeText(ANAC_CONSOLE_SCRIPT_MINI)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2_500)
-    } catch {
-      window.prompt("Copia script:", ANAC_CONSOLE_SCRIPT_MINI)
-    }
-  }
-
+function AnacDbPanel({ total, isLoading }: { total: number; isLoading: boolean }) {
   return (
-    <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 dark:bg-indigo-950/20 dark:border-indigo-800/50 p-4 space-y-3">
-
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
-          <ShieldCheck className="h-4 w-4 text-indigo-600 shrink-0" />
-          <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
-            BDNCP · Bandi in Corso
-          </span>
-
-          {anac.isLive && (
-            <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
-              <Wifi className="h-3 w-3" /> Live
-              {typeof anac.dataAge === "number" && (
-                <span className="text-emerald-500/70 ml-0.5">
-                  · {anac.dataAge < 60
-                      ? `${anac.dataAge}s fa`
-                      : `${Math.floor(anac.dataAge / 60)}m fa`}
-                </span>
-              )}
-            </span>
-          )}
-
-          {anac.isLoading && !anac.needsManual && (
-            <span className="inline-flex items-center gap-1 text-xs text-indigo-500 font-medium">
-              <Loader2 className="h-3 w-3 animate-spin" /> Connessione…
-            </span>
-          )}
-
-          {anac.needsManual && !anac.isLive && (
-            <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
-              <WifiOff className="h-3 w-3" /> Relay richiesto
-            </span>
-          )}
-        </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-indigo-600 hover:text-indigo-800 shrink-0"
-          onClick={onRetry}
-          disabled={anac.isLoading && !anac.needsManual}
-        >
-          <RefreshCw className={`h-3.5 w-3.5 mr-1 ${anac.isLoading && !anac.needsManual ? "animate-spin" : ""}`} />
-          Ricarica
-        </Button>
+    <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 dark:bg-indigo-950/20 dark:border-indigo-800/50 p-4 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <ShieldCheck className="h-4 w-4 text-indigo-600 shrink-0" />
+        <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+          BDNCP · Bandi in Corso
+        </span>
+        <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+          <Database className="h-3 w-3" /> Sincronizzato
+        </span>
       </div>
-
-      {/* ── Setup relay (solo quando non live) ── */}
-      {!anac.isLive && (anac.needsManual || anac.isLoading) && (
-        <div className="space-y-2.5">
-
-          {/* ── OPZIONE A: Userscript (raccomandata) ── */}
-          <div className="bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3 space-y-2">
-            <div className="flex items-start gap-2">
-              <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">A</span>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                  Relay automatico via Tampermonkey <span className="text-indigo-500 font-normal">(consigliato — una volta sola)</span>
-                </p>
-                <p className="text-[10px] text-slate-500 mt-0.5">
-                  Lo script gira in background ogni volta che ANAC è aperta. Zero azioni manuali.
-                </p>
-              </div>
-            </div>
-
-            <ol className="text-xs text-slate-600 dark:text-slate-400 space-y-1 list-decimal list-inside ml-6">
-              <li>
-                Installa{" "}
-                <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener noreferrer"
-                   className="text-indigo-600 underline font-medium">
-                  Tampermonkey
-                </a>
-                {" "}(estensione Chrome/Firefox, gratuita)
-              </li>
-              <li>
-                <a href={scriptUrl} target="_blank" rel="noopener noreferrer"
-                   className="inline-flex items-center gap-1 text-indigo-600 underline font-medium">
-                  <ExternalLink className="h-2.5 w-2.5" />
-                  Clicca qui per installare lo script relay
-                </a>
-                {" "}→ conferma in Tampermonkey
-              </li>
-              <li>
-                Apri{" "}
-                <a href="https://dati.anticorruzione.it/superset/dashboard/appalti/"
-                   target="_blank" rel="noopener noreferrer"
-                   className="text-indigo-600 underline font-medium">
-                  dati.anticorruzione.it
-                </a>
-                {" "}— lo script parte da solo ✓
-              </li>
-            </ol>
-          </div>
-
-          {/* ── OPZIONE B: Console script (fallback) ── */}
-          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-            <button
-              className="w-full flex items-center justify-between px-3 py-2 text-left bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
-              onClick={() => setShowConsole(v => !v)}
-            >
-              <div className="flex items-center gap-2">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-400 text-white text-[10px] font-bold flex items-center justify-center">B</span>
-                <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
-                  Relay manuale via console (alternativa senza estensione)
-                </span>
-              </div>
-              <ChevronRight className={`h-3.5 w-3.5 text-slate-400 transition-transform ${showConsole ? "rotate-90" : ""}`} />
-            </button>
-
-            {showConsole && (
-              <div className="px-3 pb-3 pt-2 space-y-2 bg-slate-50/50 dark:bg-slate-900/30">
-                <ol className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5 list-decimal list-inside">
-                  <li>Apri <a href="https://dati.anticorruzione.it/superset/dashboard/appalti/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">dati.anticorruzione.it</a></li>
-                  <li>Premi <kbd className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono text-[10px] border border-slate-300">F12</kbd> → tab Console</li>
-                  <li>Incolla lo script e premi Invio</li>
-                </ol>
-                <Button
-                  size="sm"
-                  className={`h-7 px-3 text-xs font-semibold transition-all ${
-                    copied
-                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                      : "bg-slate-700 hover:bg-slate-800 text-white"
-                  }`}
-                  onClick={handleCopyScript}
-                >
-                  {copied ? "✓ Copiato!" : "📋 Copia script console"}
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Stato Live ── */}
-      {anac.isLive && (
+      {!isLoading && total > 0 && (
         <p className="text-xs text-indigo-600/70">
-          <span className="font-semibold">{anac.total.toLocaleString("it-IT")}</span>{" "}
-          bandi in corso · BDNCP — Autorità Nazionale Anticorruzione
-          {typeof anac.dataAge === "number" && anac.dataAge > 300 && (
-            <button onClick={onRetry} className="ml-2 text-amber-500 underline hover:text-amber-600 text-[10px]">
-              aggiorna
-            </button>
-          )}
+          <span className="font-semibold">{total.toLocaleString("it-IT")}</span>{" "}
+          bandi attivi · BDNCP — Autorità Nazionale Anticorruzione
         </p>
       )}
     </div>
@@ -291,6 +136,28 @@ function AnacLivePanel({
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+
+/** Importo filter ranges (mapped to Supabase importo_min/importo_max) */
+const IMPORTO_RANGES: Record<string, { min?: number; max?: number }> = {
+  "< €40.000":    { max: 40_000 },
+  "€40k – €150k": { min: 40_000,    max: 150_000 },
+  "€150k – €1M":  { min: 150_000,   max: 1_000_000 },
+  "€1M – €5M":    { min: 1_000_000, max: 5_000_000 },
+  "> €5M":        { min: 5_000_000 },
+}
+
+/** Map tipo filter to oggetto_principale_contratto values */
+const TIPO_TO_CONTRATTO: Record<string, string> = {
+  goods:    "FORNITURE",
+  services: "SERVIZI",
+  works:    "LAVORI",
+}
+
+interface CigApiResponse {
+  data: TenderItem[]
+  count: number
+  totalPages: number
+}
 
 export function GareListClient() {
   const [search,   setSearch]   = useState("")
@@ -304,19 +171,53 @@ export function GareListClient() {
 
   const isAnacMode = source === "anac"
 
-  // ── Parametri ANAC ──────────────────────────────────────────────────────────
-  const anacParams = useMemo<AnacFetchParams>(() => ({
-    q:        deferredSearch || undefined,
-    page,
-    pageSize: 10,
-    tipo:     tipo && tipo !== "all" ? tipo : undefined,
-    importo:  importo && importo !== "all" ? importo : undefined,
-    inCorso:  true,
-  }), [deferredSearch, page, tipo, importo])
+  // ── Query string per ANAC (Supabase /api/cig) ─────────────────────────────
+  const anacQueryString = useMemo(() => {
+    if (!isAnacMode) return ""
+    const params = new URLSearchParams()
+    params.set("page", String(page + 1)) // /api/cig uses 1-indexed pages
+    params.set("stato", "active")
+    if (deferredSearch) params.set("q", deferredSearch)
+    if (tipo && tipo !== "all") {
+      const contratto = TIPO_TO_CONTRATTO[tipo.toLowerCase()]
+      if (contratto) params.set("tipo_contratto", contratto)
+    }
+    if (importo && importo !== "all") {
+      const range = IMPORTO_RANGES[importo]
+      if (range?.min != null) params.set("importo_min", String(range.min))
+      if (range?.max != null) params.set("importo_max", String(range.max))
+    }
+    return params.toString()
+  }, [isAnacMode, page, deferredSearch, tipo, importo])
 
-  // ── Hook ANAC (attivo solo in modalità ANAC) ─────────────────────────────────
-  // Lo chiamiamo sempre (regole degli hook) ma ignoriamo i dati se !isAnacMode
-  const anac = useAnacTenders(isAnacMode ? anacParams : { pageSize: 0 })
+  const { data: anacData, isLoading: anacLoading } = useSWR<CigApiResponse>(
+    isAnacMode ? `/api/cig?${anacQueryString}` : null,
+    fetcher,
+    { revalidateOnFocus: false, keepPreviousData: true },
+  )
+
+  // Map /api/cig response to TenderItem format
+  const anacItems: TenderItem[] = useMemo(() => {
+    if (!anacData?.data) return []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return anacData.data.map((row: any) => ({
+      id:                  `anac:${row.cig}`,
+      cig:                 row.cig ?? null,
+      oggetto:             row.oggetto_gara ?? null,
+      importo:             row.importo_lotto ?? null,
+      stato:               row.stato ?? "active",
+      provincia:           row.provincia ?? null,
+      data_pubblicazione:  row.data_pubblicazione ?? null,
+      data_scadenza:       row.data_scadenza_offerta ?? null,
+      tipo_contratto:      row.oggetto_principale_contratto ?? null,
+      descrizione_cpv:     row.descrizione_cpv ?? null,
+      sources:             "anac",
+      link_originale:      row.cig
+        ? `https://dati.anticorruzione.it/superset/recaptcha/?cig=${row.cig}&next=dettaglio_cig`
+        : null,
+      stazione_appaltante: row.sezione_regionale ?? null,
+    }))
+  }, [anacData])
 
   // ── Query string per /api/tenders (non-ANAC) ─────────────────────────────────
   const queryString = useMemo(() => {
@@ -338,24 +239,17 @@ export function GareListClient() {
   )
 
   // ── Dati unificati ─────────────────────────────────────────────────────────
-  const items: TenderItem[] = isAnacMode
-    ? (anac.items as unknown as TenderItem[])
-    : (data?.items || [])
-
-  const total     = isAnacMode ? anac.total     : (data?.total ?? 0)
-  const isLoading = isAnacMode ? anac.isLoading : swrLoading
-  const totalPages = total > 0 ? Math.ceil(total / 10) : 0
+  const items: TenderItem[] = isAnacMode ? anacItems : (data?.items || [])
+  const total     = isAnacMode ? (anacData?.count ?? 0) : (data?.total ?? 0)
+  const isLoading = isAnacMode ? anacLoading : swrLoading
+  const pageSize  = isAnacMode ? 20 : 10
+  const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0
 
   const resetFilters = useCallback(() => {
     setSearch(""); setTipo(""); setImporto(""); setScadenza(""); setSource("all"); setPage(0)
   }, [])
 
   const handleFilterChange = useCallback(() => setPage(0), [])
-  const handleAnacRetry = useCallback(() => {
-    setPage(0)
-    anac.refetch()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anac.refetch])
 
   const hasFilters = !!(search || tipo || importo || scadenza || source !== "all")
 
@@ -458,9 +352,9 @@ export function GareListClient() {
         )}
       </div>
 
-      {/* ── ANAC Live Panel ── */}
+      {/* ── ANAC DB Panel ── */}
       {isAnacMode && (
-        <AnacLivePanel anac={anac} onRetry={handleAnacRetry} />
+        <AnacDbPanel total={total} isLoading={isLoading} />
       )}
 
       {/* ── Source Stats (non-ANAC) ── */}
