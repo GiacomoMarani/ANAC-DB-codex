@@ -176,12 +176,8 @@ export async function fetchTED(
   if (importoRange?.gte != null) clauses.push(`total-value>=${importoRange.gte}`)
   if (importoRange?.lte != null) clauses.push(`total-value<=${importoRange.lte}`)
 
-  // Filtro automatico per recency: ultimi 12 mesi
-  // TED v3 usa formato data YYYYMMDD (senza trattini) nelle query expert
-  const oneYearAgo = new Date()
-  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
-  const dateFilter = oneYearAgo.toISOString().split("T")[0].replace(/-/g, "")
-  clauses.push(`publication-date>=${dateFilter}`)
+  // NON serve più il filtro publication-date: scope "active" filtra automaticamente
+  // i bandi con deadline non scaduta
 
   // Testo libero: usa ~ (contains) su campi titolo multipli
   // NON usare parole senza campo (es: "lavori AND ...") — errore di sintassi TED
@@ -194,9 +190,11 @@ export async function fetchTED(
     ...clauses,
   ].join(" AND ")
 
-  const defaultDate = new Date(Date.now() - 365*86400000).toISOString().split("T")[0].replace(/-/g, "")
+  const defaultQuery = "buyer-country=ITA"
   const body = {
-    query:  expertQuery || `buyer-country=ITA AND publication-date>=${defaultDate}`,
+    query:  expertQuery || defaultQuery,
+    // scope "active" = solo bandi con deadline non ancora scaduta
+    scope:  "active",
     // Solo campi validi per TED API v3 (sort non è supportato)
     fields: [
       "publication-number",
@@ -213,6 +211,7 @@ export async function fetchTED(
       "contract-nature-main-lot",
       "links",
       "main-classification-proc",
+      "notice-type",
     ],
     page:  page + 1,
     limit: pageSize,
