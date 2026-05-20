@@ -24,7 +24,7 @@ export interface NormalizedTender {
   tipo_contratto: string | null
   /** Codici CPV (stringa) */
   descrizione_cpv: string | null
-  /** Chiave fonte: ted | anac | sintel | mepa | start_toscana | halleyweb | place_vda | cato */
+  /** Chiave fonte: ted | anac | cato (principali) + sub-fonti CATO */
   sources: SourceKey
   /** URL originale del bando */
   link_originale: string | null
@@ -46,12 +46,12 @@ export type SourceKey =
 export const SOURCE_LABELS: Record<SourceKey, string> = {
   ted:           "TED Europa",
   anac:          "ANAC",
-  sintel:        "Sintel (Lombardia)",
-  mepa:          "MePA / AcquistinRetePa",
+  sintel:        "Sintel",
+  mepa:          "MePA",
   start_toscana: "Start Toscana",
   halleyweb:     "Halley Web",
   place_vda:     "Valle d'Aosta",
-  cato:          "CATO (aggregato)",
+  cato:          "CATO",
 }
 
 /** Colori badge per ogni fonte (Tailwind-compatible) */

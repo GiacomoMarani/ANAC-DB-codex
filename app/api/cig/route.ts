@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
       sezione_regionale,
       oggetto_principale_contratto,
       descrizione_cpv,
+      denominazione_amministrazione_appaltante,
       esito
     `, { count: "exact" })
     .order("id", { ascending: false })

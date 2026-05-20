@@ -92,6 +92,7 @@ const ANAC_COLUMNS = [
   "tipo_scelta_contraente",
   "sezione_regionale",
   "cod_cpv",
+  "provincia",
 ];
 
 // ── Mapping ───────────────────────────────────────────────────────────────────
@@ -100,17 +101,21 @@ function mapToSupabase(row) {
   const tsMs = typeof row.data_pubblicazione === "number" ? row.data_pubblicazione : null;
   const dataPub = tsMs ? new Date(tsMs).toISOString().split("T")[0] : null;
 
+  const scadMs = typeof row.data_scadenza_offerta === "number" ? row.data_scadenza_offerta : null;
+  const dataScad = scadMs ? new Date(scadMs).toISOString().split("T")[0] : (typeof row.data_scadenza_offerta === "string" ? row.data_scadenza_offerta.split("T")[0] : null);
+
   return {
     cig: row.cig,
     oggetto_gara: row.oggetto_bando || null,
     importo_lotto: typeof row.importo_lotto === "number" ? row.importo_lotto : null,
     oggetto_principale_contratto: row.oggetto_principale_contratto || null,
     stato: "active",
-    provincia: null,
+    provincia: row.provincia || null,
     data_pubblicazione: dataPub,
-    data_scadenza_offerta: null,
+    data_scadenza_offerta: dataScad,
     sezione_regionale: row.sezione_regionale || null,
     descrizione_cpv: row.cod_cpv || null,
+    denominazione_amministrazione_appaltante: row.denominazione_amministrazione_appaltante || null,
     esito: null,
   };
 }

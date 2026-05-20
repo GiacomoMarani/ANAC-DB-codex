@@ -53,12 +53,7 @@ const ALL_SOURCES: { value: SourceKey | "all"; label: string; flag?: string }[] 
   { value: "all",          label: "Tutte le fonti" },
   { value: "anac",         label: "ANAC (Bandi in corso)", flag: "🏛️" },
   { value: "ted",          label: "TED Europa",             flag: "🇪🇺" },
-  { value: "sintel",       label: "Sintel (Lombardia)",     flag: "🏛️" },
-  { value: "mepa",         label: "MePA / AcquistinRetePa", flag: "🇮🇹" },
-  { value: "start_toscana",label: "Start Toscana",          flag: "🌿" },
-  { value: "halleyweb",    label: "Halley Web",             flag: "🌐" },
-  { value: "place_vda",    label: "Valle d'Aosta",          flag: "⛰️" },
-  { value: "cato",         label: "CATO (tutte)",           flag: "📡" },
+  { value: "cato",         label: "CATO (aggregato)",       flag: "📡" },
 ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -215,7 +210,7 @@ export function GareListClient() {
       link_originale:      row.cig
         ? `https://dati.anticorruzione.it/superset/recaptcha/?cig=${row.cig}&next=dettaglio_cig`
         : null,
-      stazione_appaltante: row.sezione_regionale ?? null,
+      stazione_appaltante: row.denominazione_amministrazione_appaltante ?? row.sezione_regionale ?? null,
     }))
   }, [anacData])
 

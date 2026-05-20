@@ -77,7 +77,7 @@ export function mapAnacRow(row: Record<string, any>): NormalizedTender {
     oggetto:             row.oggetto_bando ?? null,
     importo:             typeof row.importo_lotto === "number" ? row.importo_lotto : null,
     stato:               "active",
-    provincia:           row.sezione_regionale?.replace("SEZIONE REGIONALE ", "") ?? row.provincia ?? null,
+    provincia:           row.provincia ?? row.sezione_regionale?.replace("SEZIONE REGIONALE ", "") ?? null,
     data_pubblicazione:  tsMs ? new Date(tsMs).toISOString() : null,
     data_scadenza:       null,
     tipo_contratto:      TIPO_MAP[row.oggetto_principale_contratto] ?? row.oggetto_principale_contratto ?? null,
@@ -127,7 +127,7 @@ export function buildAnacPayload(params: AnacFetchParams) {
 
   // Colonne diverse per datasource 81 (BANDI_IN_CORSO) vs 83 (APPALTI)
   const columns = inCorso
-    ? ["cig","oggetto_bando","importo_lotto","denominazione_amministrazione_appaltante","data_pubblicazione","oggetto_principale_contratto","tipo_scelta_contraente","sezione_regionale","cod_cpv","flag_pnrr_pnc"]
+    ? ["cig","oggetto_bando","importo_lotto","denominazione_amministrazione_appaltante","data_pubblicazione","oggetto_principale_contratto","tipo_scelta_contraente","sezione_regionale","cod_cpv","flag_pnrr_pnc","provincia"]
     : ["cig","oggetto_bando","importo_lotto","denominazione_amministrazione_appaltante","data_pubblicazione","oggetto_principale_contratto","tipo_scelta_contraente","provincia","sezione_regionale"]
 
   return {

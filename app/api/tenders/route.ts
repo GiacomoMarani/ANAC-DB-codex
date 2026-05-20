@@ -85,11 +85,11 @@ export async function GET(request: NextRequest) {
   const importo  = sp.get("importo") ?? undefined
   const scadenza = sp.get("scadenza") ?? undefined
 
-  // Multi-valore: ?source=ted&source=sintel
+  // Multi-valore: ?source=ted&source=cato
   const rawSources = sp.getAll("source")
   const sources: SourceKey[] = rawSources.length > 0
     ? (rawSources as SourceKey[])
-    : ["cato"] // default: Cato generico (tutte le fonti)
+    : ["ted", "cato"] // default: TED + Cato (aggregazione reale multi-fonte)
 
   const tedKey = process.env.TED_API_KEY ?? ""
 

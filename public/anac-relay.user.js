@@ -108,7 +108,7 @@
       'sezione_regionale',
       'cod_cpv',
       'flag_pnrr_pnc',
-      'data_scadenza_offerta',
+      'provincia',
     ]
 
     const filters = []

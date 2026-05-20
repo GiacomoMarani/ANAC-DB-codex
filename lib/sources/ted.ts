@@ -26,8 +26,13 @@ const IMPORTO_TO_TED: Record<string, { gte?: number; lte?: number }> = {
 }
 
 // Estrae il testo dalla struttura multilingua di TED (preferenza: ita > eng > primo disponibile)
-function extractLang(obj: Record<string, string[]> | null | undefined): string | null {
+function extractLang(obj: Record<string, string[]> | string[] | string | null | undefined): string | null {
   if (!obj) return null
+  // Se è già una stringa, restituiscila direttamente
+  if (typeof obj === "string") return obj
+  // Se è un array di stringhe, prendi il primo elemento
+  if (Array.isArray(obj)) return obj[0] ?? null
+  // Oggetto multilingua { ita: [...], eng: [...], ... }
   return (
     obj.ita?.[0] ??
     obj.eng?.[0] ??
@@ -35,6 +40,14 @@ function extractLang(obj: Record<string, string[]> | null | undefined): string |
     Object.values(obj)[0]?.[0] ??
     null
   )
+}
+
+/** Unwrap un valore TED che può essere stringa, array di stringhe, o null */
+function unwrapTedValue(val: unknown): string | null {
+  if (val == null) return null
+  if (typeof val === "string") return val
+  if (Array.isArray(val)) return val[0] ?? null
+  return String(val)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,16 +81,19 @@ function mapTedNotice(n: any): NormalizedTender {
     ? extractLang(buyerRaw as Record<string, string[]>)
     : (buyerRaw as string | null) ?? null
 
-  // CPV
+  // CPV — può essere oggetto multilingua, array, stringa, o numero
   const cpvRaw  = n["main-classification-proc"] ?? n["cpv-code"] ?? null
-  const cpvText = typeof cpvRaw === "object" ? extractLang(cpvRaw as Record<string,string[]>) : String(cpvRaw ?? "")
+  const cpvText = extractLang(cpvRaw as Record<string, string[]> | string[] | string | null)
 
   // Date
   // publication-date = data di pubblicazione sul TES
   // dispatch-date = data di invio al giornale
   // deadline-date-lot = scadenza offerte (eForms), deadline = scadenza legacy
-  const dataPub = n["publication-date"] ?? n["dispatch-date"] ?? null
-  const dataScadenza = n["deadline-date-lot"] ?? n["deadline"] ?? null
+  // Questi campi possono arrivare come array: ["2025-06-23+02:00"] → estrarre e pulire
+  const dataPub = unwrapTedValue(n["publication-date"] ?? n["dispatch-date"])
+  const dataScadRaw = unwrapTedValue(n["deadline-date-lot"] ?? n["deadline"])
+  // Rimuovi timezone offset (+02:00) per uniformità ISO
+  const dataScadenza = dataScadRaw?.replace(/\+\d{2}:\d{2}$/, "") ?? null
 
   return {
     id:                  `ted:${pubNum}`,
@@ -86,14 +102,27 @@ function mapTedNotice(n: any): NormalizedTender {
     importo,
     stato:               "active",
     provincia:           null,
-    data_pubblicazione:  dataPub,
+    data_pubblicazione:  typeof dataPub === "string" ? dataPub.replace(/\+\d{2}:\d{2}$/, "") : dataPub,
     data_scadenza:       dataScadenza,
-    tipo_contratto:      n["contract-nature-main-lot"] ?? null,
+    tipo_contratto:      mapTedContractNature(n["contract-nature-main-lot"]),
     descrizione_cpv:     cpvText || null,
     sources:             "ted",
     link_originale:      htmlLink,
     stazione_appaltante: stazione,
   }
+}
+
+/** Mappa il tipo contratto TED (può essere array) in label italiana */
+function mapTedContractNature(raw: unknown): string | null {
+  if (!raw) return null
+  const val = Array.isArray(raw) ? raw[0] : String(raw)
+  if (!val) return null
+  const map: Record<string, string> = {
+    supplies: "Forniture", SUPPLIES: "Forniture",
+    services: "Servizi",   SERVICES: "Servizi",
+    works:    "Lavori",     WORKS:    "Lavori",
+  }
+  return map[val] ?? val
 }
 
 export interface TedFetchParams {

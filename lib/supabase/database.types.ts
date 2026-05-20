@@ -14,6 +14,7 @@ export type Database = {
           data_scadenza_offerta: string | null
           sezione_regionale: string | null
           descrizione_cpv: string | null
+          denominazione_amministrazione_appaltante: string | null
           esito: string | null
         }
         Insert: {
@@ -28,6 +29,7 @@ export type Database = {
           data_scadenza_offerta?: string | null
           sezione_regionale?: string | null
           descrizione_cpv?: string | null
+          denominazione_amministrazione_appaltante?: string | null
           esito?: string | null
         }
         Update: {
@@ -42,6 +44,7 @@ export type Database = {
           data_scadenza_offerta?: string | null
           sezione_regionale?: string | null
           descrizione_cpv?: string | null
+          denominazione_amministrazione_appaltante?: string | null
           esito?: string | null
         }
         Relationships: []
