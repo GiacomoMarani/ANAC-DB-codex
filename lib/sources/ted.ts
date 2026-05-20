@@ -193,8 +193,8 @@ export async function fetchTED(
   const defaultQuery = "buyer-country=ITA"
   const body = {
     query:  expertQuery || defaultQuery,
-    // scope "active" = solo bandi con deadline non ancora scaduta
-    scope:  "active",
+    // scope "ACTIVE" = solo bandi con deadline non ancora scaduta
+    scope:  "ACTIVE",
     // Solo campi validi per TED API v3 (sort non è supportato)
     fields: [
       "publication-number",
