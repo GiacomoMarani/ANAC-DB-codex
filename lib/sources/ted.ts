@@ -61,12 +61,15 @@ function mapTedNotice(n: any): NormalizedTender {
     (pubNum ? `https://ted.europa.eu/it/notice/-/detail/${pubNum}` : null)
 
   // Titolo: prova più campi in ordine di preferenza
-  // TED v3: title-lot (lotti eForms), notice-title (CN standard), announcement-title, title-proc
+  // TED v3: title-lot (lotti eForms, titolo vero), notice-title (spesso solo iniziale paese "I"),
+  // announcement-title, title-proc
+  // Scarta titoli ≤ 2 caratteri (es. "I" = Italia, "S" = Spain)
+  const minLen = (s: string | null) => s && s.length > 2 ? s : null
   const titleText =
-    extractLang(n["title-lot"]        as Record<string,string[]>) ??
-    extractLang(n["notice-title"]     as Record<string,string[]>) ??
-    extractLang(n["announcement-title"] as Record<string,string[]>) ??
-    extractLang(n["title-proc"]       as Record<string,string[]>) ??
+    minLen(extractLang(n["title-lot"]        as Record<string,string[]>)) ??
+    minLen(extractLang(n["notice-title"]     as Record<string,string[]>)) ??
+    minLen(extractLang(n["announcement-title"] as Record<string,string[]>)) ??
+    minLen(extractLang(n["title-proc"]       as Record<string,string[]>)) ??
     (pubNum ? `Bando TED n. ${pubNum}` : null)
 
   // Importo
@@ -176,8 +179,15 @@ export async function fetchTED(
   if (importoRange?.gte != null) clauses.push(`total-value>=${importoRange.gte}`)
   if (importoRange?.lte != null) clauses.push(`total-value<=${importoRange.lte}`)
 
-  // NON serve più il filtro publication-date: scope "active" filtra automaticamente
-  // i bandi con deadline non scaduta
+  // Filtra solo bandi di gara (competition notices) — esclude esiti (can-*) e qualification systems (qu-sy)
+  // TED non supporta IN(...) con virgola, serve un OR esplicito
+  clauses.push("(notice-type=cn-standard OR notice-type=cn-social OR notice-type=cn-desg OR notice-type=pin-cfc-standard OR notice-type=pin-cfc-social)")
+
+  // Filtro pubblicazione ultimi 6 mesi come safety net
+  const sixMonthsAgo = new Date()
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+  const pubDateFilter = sixMonthsAgo.toISOString().split("T")[0].replace(/-/g, "")
+  clauses.push(`publication-date>=${pubDateFilter}`)
 
   // Testo libero: usa ~ (contains) su campi titolo multipli
   // NON usare parole senza campo (es: "lavori AND ...") — errore di sintassi TED
