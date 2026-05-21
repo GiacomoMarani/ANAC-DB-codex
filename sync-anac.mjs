@@ -210,29 +210,58 @@ async function main() {
   });
 
   try {
-    // 2. Sessione ANAC
+    // 2. Sessione ANAC (con retry per WAF/cloud IP)
     console.log("📡 Connessione ad ANAC...");
     const page = await context.newPage();
-    await page.goto(ANAC_BASE + "/", {
-      waitUntil: "domcontentloaded",
-      timeout: 20_000,
-    });
-    await page.waitForTimeout(1500);
-    await page.goto(ANAC_DASHBOARD, {
-      waitUntil: "domcontentloaded",
-      timeout: 25_000,
-    });
-    await page.waitForTimeout(2000);
-    console.log("✅ Sessione ANAC stabilita");
 
-    // 3. CSRF token
-    const csrfRes = await page.request.get(ANAC_CSRF_URL, {
-      headers: { Accept: "application/json" },
-    });
-    const csrfBody = await csrfRes.json();
-    const csrf = csrfBody.result;
-    if (!csrf) throw new Error("CSRF token vuoto");
-    console.log("🔑 CSRF ottenuto");
+    let csrf = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await page.goto(ANAC_BASE + "/", {
+          waitUntil: "domcontentloaded",
+          timeout: 30_000,
+        });
+        await page.waitForTimeout(2000 + attempt * 1000);
+        await page.goto(ANAC_DASHBOARD, {
+          waitUntil: "domcontentloaded",
+          timeout: 30_000,
+        });
+        await page.waitForTimeout(3000 + attempt * 1000);
+        console.log("✅ Sessione ANAC stabilita");
+
+        // 3. CSRF token
+        const csrfRes = await page.request.get(ANAC_CSRF_URL, {
+          headers: { Accept: "application/json" },
+        });
+
+        const csrfText = await csrfRes.text();
+        if (!csrfText || csrfText.trim().length === 0) {
+          throw new Error("Risposta CSRF vuota — probabile blocco WAF");
+        }
+
+        let csrfBody;
+        try {
+          csrfBody = JSON.parse(csrfText);
+        } catch {
+          throw new Error(`Risposta CSRF non è JSON valido: ${csrfText.slice(0, 200)}`);
+        }
+
+        csrf = csrfBody.result;
+        if (!csrf) throw new Error("CSRF token vuoto nel JSON");
+        console.log("🔑 CSRF ottenuto");
+        break; // successo!
+      } catch (e) {
+        console.warn(`  ⚠️ Tentativo ${attempt}/3 fallito: ${e.message}`);
+        if (attempt === 3) {
+          throw new Error(
+            `Impossibile connettersi ad ANAC dopo 3 tentativi. ` +
+            `Possibile blocco WAF per IP cloud. Ultimo errore: ${e.message}`
+          );
+        }
+        console.log(`  ⏳ Attesa ${attempt * 5}s prima del prossimo tentativo...`);
+        await page.waitForTimeout(attempt * 5000);
+      }
+    }
 
     // 4. Scarica tutti i bandi paginando
     const allCigs = new Set();     // CIG scaricati da ANAC in questo sync
