@@ -516,15 +516,21 @@ export function GareListClient() {
       seen.add(key)
       return true
     })
+    // Rimuovi gare con scadenza passata
+    const today = new Date().toISOString().slice(0, 10)
+    const active = deduped.filter(item => {
+      if (!item.data_scadenza) return true
+      return item.data_scadenza >= today
+    })
     // Ordina: scadenza più vicina prima, senza scadenza in coda
-    deduped.sort((a, b) => {
+    active.sort((a, b) => {
       const aHas = !!a.data_scadenza
       const bHas = !!b.data_scadenza
       if (aHas && bHas) return a.data_scadenza!.localeCompare(b.data_scadenza!)
       if (aHas !== bHas) return aHas ? -1 : 1
       return (b.data_pubblicazione ?? "").localeCompare(a.data_pubblicazione ?? "")
     })
-    return deduped
+    return active
   }, [isAnacMode, isAllMode, anacItems, data?.items])
 
   const total     = isAnacMode ? (anacData?.count ?? 0) : isAllMode ? ((data?.total ?? 0) + (anacData?.count ?? 0)) : (data?.total ?? 0)

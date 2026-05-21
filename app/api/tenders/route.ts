@@ -114,6 +114,13 @@ export async function GET(request: NextRequest) {
     return true
   })
 
+  // Rimuovi gare con scadenza già passata
+  const now = new Date().toISOString()
+  allItems = allItems.filter(item => {
+    if (!item.data_scadenza) return true          // senza scadenza → tieni
+    return item.data_scadenza >= now.slice(0, 10) // confronto YYYY-MM-DD
+  })
+
   // Ordinamento: prima bandi con scadenza (dalla più vicina), poi quelli senza
   allItems.sort((a, b) => {
     const aHas = !!a.data_scadenza
