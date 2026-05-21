@@ -14,9 +14,9 @@ export default function GarePage() {
     <div className="min-h-screen bg-background">
       {/* ── Navbar ── */}
       <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/gare" className="flex items-center gap-3 group">
-            <div className="relative h-9 w-9 rounded-lg overflow-hidden shadow-sm ring-1 ring-black/5">
+        <div className="container mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between">
+          <Link href="/gare" className="flex items-center gap-2 sm:gap-3 group">
+            <div className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-lg overflow-hidden shadow-sm ring-1 ring-black/5">
               <Image
                 src="/logo.jpg"
                 alt="Tender AI DB"
@@ -34,15 +34,15 @@ export default function GarePage() {
               </span>
             </div>
           </Link>
-          <Link href="/ricerca-gare" className="text-sm font-medium text-primary hover:underline">
+          <a href="https://tender-ai-pro.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-xs sm:text-sm font-medium text-primary hover:underline whitespace-nowrap">
             Analisi avanzata →
-          </Link>
+          </a>
         </div>
       </header>
 
       {/* ── Hero ── */}
       <section className="border-b bg-gradient-to-b from-card to-background">
-        <div className="container mx-auto px-4 py-10 md:py-14">
+        <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-10 md:py-14">
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 mb-3">
               <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -50,10 +50,10 @@ export default function GarePage() {
                 Aggiornamento in tempo reale
               </span>
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">
+            <h1 className="text-xl sm:text-3xl md:text-4xl font-bold tracking-tight mb-2 sm:mb-3">
               Gare d&apos;appalto pubbliche
             </h1>
-            <p className="text-base text-muted-foreground leading-relaxed">
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
               Cerca tra migliaia di bandi da <strong>ANAC</strong>, <strong>TED Europa</strong> e <strong>CATO</strong>.
               {" "}Filtra per tipo, importo e scadenza. Analizza con l&apos;AI.
             </p>
@@ -62,7 +62,7 @@ export default function GarePage() {
       </section>
 
       {/* ── Main Content ── */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
         <Suspense fallback={
           <div className="space-y-4">
             <Skeleton className="h-11 w-full" />

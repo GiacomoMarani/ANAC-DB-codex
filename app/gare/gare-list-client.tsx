@@ -6,6 +6,7 @@ import {
   Search, SlidersHorizontal, ChevronLeft, ChevronRight,
   ExternalLink, Clock, Euro, Building2, MapPin, FileText, Loader2,
   Globe, ShieldCheck, Database, Sparkles, Key, X, ChevronDown, ChevronUp,
+  Copy, Download, Check,
 } from "lucide-react"
 import { Button }  from "@/components/ui/button"
 import { Input }   from "@/components/ui/input"
@@ -244,6 +245,45 @@ function AiKeyModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// ─── Helpers per rendering AI ────────────────────────────────────────────────
+
+function renderAiHtml(md: string): string {
+  return md
+    .replace(/^#{1,4}\s+(.+)$/gm, '<div class="font-semibold text-amber-800 dark:text-amber-300 mt-3 mb-1">$1</div>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(?<![*])\*(?![*])(.*?)\*(?![*])/g, '<em>$1</em>')
+    .replace(/^(\d+)\.\s+(.+)$/gm, '<div class="flex gap-2 ml-1"><span class="text-amber-500 font-semibold shrink-0">$1.</span><span>$2</span></div>')
+    .replace(/^[-•]\s+(.+)$/gm, '<div class="flex gap-2 ml-3"><span class="text-amber-400">•</span><span>$1</span></div>')
+    .replace(/\n/g, '<br/>')
+    .replace(/(<br\/>){3,}/g, '<br/><br/>')
+}
+
+function downloadFile(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadAsDocx(content: string, filename: string) {
+  const html = `
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
+<head><meta charset='utf-8'><title>${filename}</title>
+<style>body{font-family:Calibri,sans-serif;font-size:11pt;line-height:1.6;color:#333}h3{color:#b45309;margin-top:16pt}strong{color:#92400e}ul,ol{margin-left:20pt}</style>
+</head><body>
+${content
+  .replace(/^#{1,4}\s+(.+)$/gm, '<h3>$1</h3>')
+  .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  .replace(/^(\d+)\.\s+(.+)$/gm, '<p style="margin-left:20pt"><b>$1.</b> $2</p>')
+  .replace(/^[-•]\s+(.+)$/gm, '<p style="margin-left:30pt">• $1</p>')
+  .replace(/\n/g, '<br>')}
+</body></html>`
+  downloadFile(html, filename + '.doc', 'application/msword')
+}
+
 // ─── AI Analysis Panel (inline expandable) ───────────────────────────────────
 
 function AiAnalysisPanel({ tender, sourceUrl }: { tender: TenderItem; sourceUrl?: string }) {
@@ -251,34 +291,29 @@ function AiAnalysisPanel({ tender, sourceUrl }: { tender: TenderItem; sourceUrl?
   const [loading, setLoading]   = useState(false)
   const [result, setResult]     = useState<string | null>(null)
   const [error, setError]       = useState<string | null>(null)
+  const [copied, setCopied]     = useState(false)
 
   const tenderId = String(tender.cig ?? tender.id)
+  const fileName = `analisi_${tenderId}`
 
   const handleAnalyze = async () => {
     const apiKey = getGeminiKey()
     if (!apiKey) return
-
-    // Check cache
     const cached = getCachedAnalysis(tenderId)
-    if (cached) {
-      setResult(cached)
-      setExpanded(true)
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-    setExpanded(true)
-
+    if (cached) { setResult(cached); setExpanded(true); return }
+    setLoading(true); setError(null); setExpanded(true)
     try {
       const text = await analyzeWithGemini(apiKey, tender, sourceUrl)
-      setResult(text)
-      setCachedAnalysis(tenderId, text)
+      setResult(text); setCachedAnalysis(tenderId, text)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Errore durante l'analisi")
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
+  }
+
+  const handleCopy = async () => {
+    if (!result) return
+    await navigator.clipboard.writeText(result)
+    setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
 
   const hasKey = typeof window !== "undefined" && !!getGeminiKey()
@@ -287,50 +322,38 @@ function AiAnalysisPanel({ tender, sourceUrl }: { tender: TenderItem; sourceUrl?
   return (
     <div className="pt-2">
       {!expanded ? (
-        <button
-          onClick={handleAnalyze}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors"
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          Analizza con AI
+        <button onClick={handleAnalyze} className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors">
+          <Sparkles className="h-3.5 w-3.5" /> Analizza con AI
         </button>
       ) : (
         <div className="space-y-2">
-          <button
-            onClick={() => setExpanded(false)}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ChevronUp className="h-3 w-3" />
-            Chiudi analisi
+          <button onClick={() => setExpanded(false)} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <ChevronUp className="h-3 w-3" /> Chiudi analisi
           </button>
-
           <div className="rounded-lg border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800/40 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles className="h-4 w-4 text-amber-500" />
-              <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">Analisi AI</span>
-            </div>
-
-            {loading && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Analisi in corso...
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">Analisi AI</span>
               </div>
-            )}
-
-            {error && (
-              <p className="text-sm text-red-600">{error}</p>
-            )}
-
-            {result && (
-              <div
-                className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed"
-                dangerouslySetInnerHTML={{
-                  __html: result
-                    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-                    .replace(/\n/g, "<br/>")
-                }}
-              />
-            )}
+              {result && (
+                <div className="flex items-center gap-1">
+                  <button onClick={handleCopy} className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40 transition-colors" title="Copia testo">
+                    {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {copied ? "Copiato!" : "Copia"}
+                  </button>
+                  <button onClick={() => downloadFile(result, fileName + '.md', 'text/markdown')} className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40 transition-colors" title="Scarica come Markdown">
+                    <Download className="h-3 w-3" /> .md
+                  </button>
+                  <button onClick={() => downloadAsDocx(result, fileName)} className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40 transition-colors" title="Scarica come Word">
+                    <Download className="h-3 w-3" /> .doc
+                  </button>
+                </div>
+              )}
+            </div>
+            {loading && (<div className="flex items-center gap-2 text-sm text-muted-foreground py-4"><Loader2 className="h-4 w-4 animate-spin" /> Analisi in corso...</div>)}
+            {error && (<p className="text-sm text-red-600">{error}</p>)}
+            {result && (<div className="text-sm leading-relaxed text-foreground/90" dangerouslySetInnerHTML={{ __html: renderAiHtml(result) }} />)}
           </div>
         </div>
       )}
@@ -565,16 +588,16 @@ export function GareListClient() {
             }
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(0) }}
-            className="pl-10 h-11 text-base"
+            className="pl-10 h-11 text-sm sm:text-base"
           />
         </div>
-        <Button size="lg" className="px-6" onClick={() => setPage(0)}>
+        <Button size="lg" className="px-4 sm:px-6" onClick={() => setPage(0)}>
           Cerca
         </Button>
       </div>
 
       {/* ── Filters ── */}
-      <div className="flex flex-wrap gap-3 items-center">
+      <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
         <SlidersHorizontal className="h-4 w-4 text-muted-foreground shrink-0" />
 
         {/* Fonte */}
@@ -582,7 +605,7 @@ export function GareListClient() {
           value={source}
           onValueChange={v => { setSource(v as SourceKey | "all"); handleFilterChange() }}
         >
-          <SelectTrigger id="filter-source" className="w-[220px]">
+          <SelectTrigger id="filter-source" className="w-[160px] sm:w-[220px] text-xs sm:text-sm">
             <Globe className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
             <SelectValue placeholder="Tutte le fonti" />
           </SelectTrigger>
@@ -598,7 +621,7 @@ export function GareListClient() {
 
         {/* Tipo procedura */}
         <Select value={tipo || "all"} onValueChange={v => { setTipo(v === "all" ? "" : v); handleFilterChange() }}>
-          <SelectTrigger id="filter-tipo" className="w-[180px]">
+          <SelectTrigger id="filter-tipo" className="w-[140px] sm:w-[180px] text-xs sm:text-sm">
             <SelectValue placeholder="Tipo procedura" />
           </SelectTrigger>
           <SelectContent>
@@ -611,7 +634,7 @@ export function GareListClient() {
 
         {/* Importo */}
         <Select value={importo || "all"} onValueChange={v => { setImporto(v === "all" ? "" : v); handleFilterChange() }}>
-          <SelectTrigger id="filter-importo" className="w-[180px]">
+          <SelectTrigger id="filter-importo" className="w-[140px] sm:w-[180px] text-xs sm:text-sm">
             <SelectValue placeholder="Valore appalto" />
           </SelectTrigger>
           <SelectContent>
@@ -627,7 +650,7 @@ export function GareListClient() {
         {/* Scadenza (solo non-ANAC: BANDI_IN_CORSO è già filtrato) */}
         {!isAnacMode && (
           <Select value={scadenza || "all"} onValueChange={v => { setScadenza(v === "all" ? "" : v); handleFilterChange() }}>
-            <SelectTrigger id="filter-scadenza" className="w-[180px]">
+            <SelectTrigger id="filter-scadenza" className="w-[150px] sm:w-[180px] text-xs sm:text-sm">
               <SelectValue placeholder="Scadenza offerte" />
             </SelectTrigger>
             <SelectContent>
@@ -716,19 +739,21 @@ export function GareListClient() {
 
       {/* ── Pagination ── */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4 border-t">
+        <div className="flex items-center justify-between pt-4 border-t gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setPage(p => Math.max(0, p - 1))}
             disabled={page === 0}
             id="btn-prev-page"
+            className="text-xs sm:text-sm"
           >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Pagina precedente
+            <ChevronLeft className="h-4 w-4 mr-0.5 sm:mr-1" />
+            <span className="hidden sm:inline">Pagina precedente</span>
+            <span className="sm:hidden">Prec</span>
           </Button>
-          <span className="text-sm text-muted-foreground">
-            Pagina {page + 1} di {totalPages.toLocaleString("it-IT")}
+          <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+            {page + 1} / {totalPages.toLocaleString("it-IT")}
           </span>
           <Button
             variant="outline"
@@ -736,9 +761,11 @@ export function GareListClient() {
             onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
             disabled={page >= totalPages - 1}
             id="btn-next-page"
+            className="text-xs sm:text-sm"
           >
-            Pagina successiva
-            <ChevronRight className="h-4 w-4 ml-1" />
+            <span className="hidden sm:inline">Pagina successiva</span>
+            <span className="sm:hidden">Succ</span>
+            <ChevronRight className="h-4 w-4 ml-0.5 sm:ml-1" />
           </Button>
         </div>
       )}
@@ -776,7 +803,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
   const cpvCodes = tender.descrizione_cpv ?? tender.tipo_contratto
 
   return (
-    <div className="border rounded-xl p-5 bg-card hover:shadow-md transition-shadow space-y-3">
+    <div className="border rounded-xl p-3 sm:p-5 bg-card hover:shadow-md transition-shadow space-y-2 sm:space-y-3">
       {/* Header row */}
       <div className="flex flex-wrap items-center gap-2">
         {isActive && (
@@ -787,7 +814,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
         {/* Badge fonte colorato */}
         <SourceBadge source={tender.sources} />
         {cpvCodes && (
-          <Badge variant="outline" className="font-mono text-xs max-w-[240px] truncate" title={cpvCodes}>
+          <Badge variant="outline" className="font-mono text-[10px] sm:text-xs max-w-[180px] sm:max-w-[240px] truncate" title={cpvCodes}>
             CPV: {cpvCodes}
           </Badge>
         )}
@@ -854,7 +881,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-1">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0 pt-1">
         <span className="text-xs text-muted-foreground flex items-center gap-1">
           <Building2 className="h-3 w-3" />
           {tender.stazione_appaltante ?? "Stazione appaltante n.d."}
