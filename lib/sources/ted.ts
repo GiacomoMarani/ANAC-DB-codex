@@ -183,11 +183,15 @@ export async function fetchTED(
   // TED non supporta IN(...) con virgola, serve un OR esplicito
   clauses.push("(notice-type=cn-standard OR notice-type=cn-social OR notice-type=cn-desg OR notice-type=pin-cfc-standard OR notice-type=pin-cfc-social)")
 
-  // Filtro pubblicazione ultimi 6 mesi come safety net
-  const sixMonthsAgo = new Date()
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
-  const pubDateFilter = sixMonthsAgo.toISOString().split("T")[0].replace(/-/g, "")
-  clauses.push(`publication-date>=${pubDateFilter}`)
+  // deadline-date-lot è presente solo per ~10% dei bandi TED (il resto lo ha solo nella pagina web, non nell'API)
+  // Usiamo publication-date degli ultimi 2 mesi + scope ACTIVE come proxy ragionevole
+  // per gare ancora aperte: un bando pubblicato < 2 mesi fa con scope ACTIVE è probabilmente attivo
+  if (!scadenza) {
+    const twoMonthsAgo = new Date()
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2)
+    const pubDateFilter = twoMonthsAgo.toISOString().split("T")[0].replace(/-/g, "")
+    clauses.push(`publication-date>=${pubDateFilter}`)
+  }
 
   // Testo libero: usa ~ (contains) su campi titolo multipli
   // NON usare parole senza campo (es: "lavori AND ...") — errore di sintassi TED
@@ -254,10 +258,21 @@ export async function fetchTED(
   const data    = await res.json()
   const notices = data.notices ?? data.results ?? data.data ?? []
   const total   = data.totalNoticeCount ?? data.total ?? notices.length
+  const mapped  = notices.map(mapTedNotice)
+
+  // Post-filtro: rimuovi bandi senza scadenza pubblicati più di 60 giorni fa
+  // (sono probabilmente scaduti ma TED li segna ancora come "ACTIVE")
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - 60)
+  const filtered = mapped.filter((item: NormalizedTender) => {
+    if (item.data_scadenza) return true  // ha scadenza → tienilo
+    if (!item.data_pubblicazione) return false  // nessuna data → scarta
+    return new Date(item.data_pubblicazione) >= cutoff
+  })
 
   return {
-    items:  notices.map(mapTedNotice),
-    total,
+    items:  filtered,
+    total:  Math.min(total, total - (mapped.length - filtered.length)),
     source: "ted",
   }
 }

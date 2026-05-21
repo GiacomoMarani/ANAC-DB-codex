@@ -114,6 +114,18 @@ export async function GET(request: NextRequest) {
     return true
   })
 
+  // Ordinamento: prima bandi con scadenza (dalla più vicina), poi quelli senza
+  allItems.sort((a, b) => {
+    const aHas = !!a.data_scadenza
+    const bHas = !!b.data_scadenza
+    // Entrambi hanno scadenza → ordina per scadenza crescente (più vicina prima)
+    if (aHas && bHas) return a.data_scadenza!.localeCompare(b.data_scadenza!)
+    // Solo uno ha scadenza → quello con scadenza va prima
+    if (aHas !== bHas) return aHas ? -1 : 1
+    // Nessuno ha scadenza → ordina per data pubblicazione decrescente (più recente prima)
+    return (b.data_pubblicazione ?? "").localeCompare(a.data_pubblicazione ?? "")
+  })
+
   return NextResponse.json(
     {
       items:   allItems,

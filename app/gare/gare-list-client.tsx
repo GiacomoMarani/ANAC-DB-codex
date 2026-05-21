@@ -165,10 +165,15 @@ export function GareListClient() {
   const deferredSearch = useDeferredValue(search)
 
   const isAnacMode = source === "anac"
+  const isAllMode  = source === "all"
+  // Fetch ANAC quando è selezionato "anac" O "tutte le fonti"
+  const needAnac   = isAnacMode || isAllMode
+  // Fetch TED/CATO quando NON è "anac" (cioè "all", "ted", "cato")
+  const needTenders = !isAnacMode
 
   // ── Query string per ANAC (Supabase /api/cig) ─────────────────────────────
   const anacQueryString = useMemo(() => {
-    if (!isAnacMode) return ""
+    if (!needAnac) return ""
     const params = new URLSearchParams()
     params.set("page", String(page + 1)) // /api/cig uses 1-indexed pages
     params.set("stato", "active")
@@ -183,10 +188,10 @@ export function GareListClient() {
       if (range?.max != null) params.set("importo_max", String(range.max))
     }
     return params.toString()
-  }, [isAnacMode, page, deferredSearch, tipo, importo])
+  }, [needAnac, page, deferredSearch, tipo, importo])
 
   const { data: anacData, isLoading: anacLoading } = useSWR<CigApiResponse>(
-    isAnacMode ? `/api/cig?${anacQueryString}` : null,
+    needAnac ? `/api/cig?${anacQueryString}` : null,
     fetcher,
     { revalidateOnFocus: false, keepPreviousData: true },
   )
@@ -214,9 +219,9 @@ export function GareListClient() {
     }))
   }, [anacData])
 
-  // ── Query string per /api/tenders (non-ANAC) ─────────────────────────────────
+  // ── Query string per /api/tenders (TED + CATO) ─────────────────────────────
   const queryString = useMemo(() => {
-    if (isAnacMode) return ""  // non usato
+    if (!needTenders) return ""  // non usato in modalità solo-ANAC
     const params = new URLSearchParams()
     params.set("p", String(page))
     if (deferredSearch)               params.set("q",       deferredSearch)
@@ -225,18 +230,43 @@ export function GareListClient() {
     if (scadenza && scadenza !== "all") params.set("scadenza", scadenza)
     if (source  && source  !== "all") params.set("source",  source)
     return params.toString()
-  }, [page, deferredSearch, tipo, importo, scadenza, source, isAnacMode])
+  }, [page, deferredSearch, tipo, importo, scadenza, source, needTenders])
 
   const { data, isLoading: swrLoading } = useSWR<TendersResponse>(
-    isAnacMode ? null : `/api/tenders?${queryString}`,
+    needTenders ? `/api/tenders?${queryString}` : null,
     fetcher,
     { revalidateOnFocus: false, keepPreviousData: true },
   )
 
   // ── Dati unificati ─────────────────────────────────────────────────────────
-  const items: TenderItem[] = isAnacMode ? anacItems : (data?.items || [])
-  const total     = isAnacMode ? (anacData?.count ?? 0) : (data?.total ?? 0)
-  const isLoading = isAnacMode ? anacLoading : swrLoading
+  // In modalità "all": merge ANAC + TED/CATO con ordinamento per scadenza
+  const items: TenderItem[] = useMemo(() => {
+    if (isAnacMode) return anacItems
+    if (!isAllMode) return data?.items || []
+    // All mode: merge ANAC + TED/CATO
+    const tedCatoItems = data?.items || []
+    const merged = [...tedCatoItems, ...anacItems]
+    // Dedup per CIG (ANAC potrebbe avere stessi bandi di TED/CATO)
+    const seen = new Set<string>()
+    const deduped = merged.filter(item => {
+      const key = String(item.cig ?? item.id)
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    // Ordina: scadenza più vicina prima, senza scadenza in coda
+    deduped.sort((a, b) => {
+      const aHas = !!a.data_scadenza
+      const bHas = !!b.data_scadenza
+      if (aHas && bHas) return a.data_scadenza!.localeCompare(b.data_scadenza!)
+      if (aHas !== bHas) return aHas ? -1 : 1
+      return (b.data_pubblicazione ?? "").localeCompare(a.data_pubblicazione ?? "")
+    })
+    return deduped
+  }, [isAnacMode, isAllMode, anacItems, data?.items])
+
+  const total     = isAnacMode ? (anacData?.count ?? 0) : isAllMode ? ((data?.total ?? 0) + (anacData?.count ?? 0)) : (data?.total ?? 0)
+  const isLoading = isAnacMode ? anacLoading : isAllMode ? (swrLoading || anacLoading) : swrLoading
   const pageSize  = isAnacMode ? 20 : 10
   const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0
 
