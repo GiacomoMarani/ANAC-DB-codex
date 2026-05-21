@@ -8,7 +8,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'ANAC Data Explorer - Consultazione CIG',
+  title: 'Tender AI DB — Gare d\'appalto pubbliche',
   description: 'Web app per la consultazione dei dati CIG (Codice Identificativo Gara) dall\'Autorita Nazionale Anticorruzione',
   generator: 'v0.app',
   icons: {

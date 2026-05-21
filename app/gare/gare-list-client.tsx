@@ -5,7 +5,7 @@ import useSWR from "swr"
 import {
   Search, SlidersHorizontal, ChevronLeft, ChevronRight,
   ExternalLink, Clock, Euro, Building2, MapPin, FileText, Loader2,
-  Globe, ShieldCheck, Database,
+  Globe, ShieldCheck, Database, Sparkles, Key, X, ChevronDown, ChevronUp,
 } from "lucide-react"
 import { Button }  from "@/components/ui/button"
 import { Input }   from "@/components/ui/input"
@@ -74,6 +74,267 @@ function daysUntil(d: string | null): number | null {
   if (!d) return null
   const diff = new Date(d).getTime() - Date.now()
   return Math.ceil(diff / 86_400_000)
+}
+
+// ─── AI Analysis Helpers ─────────────────────────────────────────────────────
+
+const GEMINI_KEY_STORAGE = "gemini_api_key"
+const AI_CACHE_PREFIX    = "ai_analysis_"
+
+function getGeminiKey(): string | null {
+  if (typeof window === "undefined") return null
+  return localStorage.getItem(GEMINI_KEY_STORAGE)
+}
+
+function setGeminiKey(key: string) {
+  localStorage.setItem(GEMINI_KEY_STORAGE, key)
+}
+
+function removeGeminiKey() {
+  localStorage.removeItem(GEMINI_KEY_STORAGE)
+}
+
+function getCachedAnalysis(id: string): string | null {
+  if (typeof window === "undefined") return null
+  return sessionStorage.getItem(AI_CACHE_PREFIX + id)
+}
+
+function setCachedAnalysis(id: string, result: string) {
+  sessionStorage.setItem(AI_CACHE_PREFIX + id, result)
+}
+
+const GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite"] as const
+
+async function callGeminiModel(apiKey: string, model: string, prompt: string): Promise<string> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 1024,
+        },
+      }),
+    },
+  )
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: { message: res.statusText } }))
+    throw new Error(err.error?.message || `Errore API Gemini (${model}): ${res.status}`)
+  }
+
+  const data = await res.json()
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "Nessuna risposta generata."
+}
+
+async function analyzeWithGemini(apiKey: string, tender: TenderItem): Promise<string> {
+  const prompt = `Sei un esperto di appalti pubblici italiani. Analizza questo bando in modo chiaro e conciso:
+
+**Oggetto:** ${tender.oggetto || "Non specificato"}
+**Importo stimato:** ${formatCurrency(tender.importo) || "Non specificato"}
+**Stazione appaltante:** ${tender.stazione_appaltante || "Non specificata"}
+**CPV:** ${tender.descrizione_cpv || "Non specificato"}
+**Tipo contratto:** ${tender.tipo_contratto || "Non specificato"}
+**Scadenza offerte:** ${formatDate(tender.data_scadenza) || "Non specificata"}
+**Fonte:** ${tender.sources?.toUpperCase() || "Non specificata"}
+
+Fornisci un'analisi strutturata:
+1. **Sintesi** — cosa richiede il bando in 2-3 frasi semplici
+2. **Settore** — a quale settore industriale si rivolge
+3. **Requisiti probabili** — quali certificazioni/requisiti servono tipicamente per partecipare
+4. **Rischi e opportunità** — valutazione rapida del bando
+5. **Consiglio** — se vale la pena approfondire e perché
+
+Rispondi in italiano, in modo professionale ma accessibile.`
+
+  // Prova il modello primario, fallback sul lite se fallisce
+  for (let i = 0; i < GEMINI_MODELS.length; i++) {
+    try {
+      return await callGeminiModel(apiKey, GEMINI_MODELS[i], prompt)
+    } catch (e) {
+      // Se è l'ultimo modello, rilancia l'errore
+      if (i === GEMINI_MODELS.length - 1) throw e
+      // Altrimenti prova il prossimo modello
+      console.warn(`Modello ${GEMINI_MODELS[i]} non disponibile, fallback su ${GEMINI_MODELS[i + 1]}`)
+    }
+  }
+  throw new Error("Nessun modello Gemini disponibile")
+}
+
+// ─── AI Settings Modal ──────────────────────────────────────────────────────
+
+function AiKeyModal({ onClose }: { onClose: () => void }) {
+  const [key, setKeyVal] = useState(getGeminiKey() || "")
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = () => {
+    if (key.trim()) {
+      setGeminiKey(key.trim())
+      setSaved(true)
+      setTimeout(() => onClose(), 800)
+    }
+  }
+
+  const handleRemove = () => {
+    removeGeminiKey()
+    setKeyVal("")
+    setSaved(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-card border rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-amber-500" />
+            <h3 className="font-semibold text-lg">Configurazione AI</h3>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          Inserisci la tua API key di <strong>Google Gemini</strong> per abilitare l&apos;analisi AI dei bandi.
+          La chiave viene salvata solo nel tuo browser.
+        </p>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Gemini API Key</label>
+          <Input
+            type="password"
+            placeholder="AIzaSy..."
+            value={key}
+            onChange={e => setKeyVal(e.target.value)}
+            className="font-mono text-sm"
+          />
+          <p className="text-xs text-muted-foreground">
+            Ottieni una chiave da{" "}
+            <a
+              href="https://aistudio.google.com/apikey"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Google AI Studio
+            </a>
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <Button onClick={handleSave} disabled={!key.trim()} className="flex-1 gap-2">
+            <Key className="h-4 w-4" />
+            {saved ? "✓ Salvata!" : "Salva"}
+          </Button>
+          {getGeminiKey() && (
+            <Button variant="outline" onClick={handleRemove} className="text-red-600 hover:text-red-700">
+              Rimuovi
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── AI Analysis Panel (inline expandable) ───────────────────────────────────
+
+function AiAnalysisPanel({ tender }: { tender: TenderItem }) {
+  const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading]   = useState(false)
+  const [result, setResult]     = useState<string | null>(null)
+  const [error, setError]       = useState<string | null>(null)
+
+  const tenderId = String(tender.cig ?? tender.id)
+
+  const handleAnalyze = async () => {
+    const apiKey = getGeminiKey()
+    if (!apiKey) return
+
+    // Check cache
+    const cached = getCachedAnalysis(tenderId)
+    if (cached) {
+      setResult(cached)
+      setExpanded(true)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    setExpanded(true)
+
+    try {
+      const text = await analyzeWithGemini(apiKey, tender)
+      setResult(text)
+      setCachedAnalysis(tenderId, text)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Errore durante l'analisi")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const hasKey = typeof window !== "undefined" && !!getGeminiKey()
+  if (!hasKey) return null
+
+  return (
+    <div className="pt-2">
+      {!expanded ? (
+        <button
+          onClick={handleAnalyze}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Analizza con AI
+        </button>
+      ) : (
+        <div className="space-y-2">
+          <button
+            onClick={() => setExpanded(false)}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ChevronUp className="h-3 w-3" />
+            Chiudi analisi
+          </button>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800/40 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4 text-amber-500" />
+              <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">Analisi AI</span>
+            </div>
+
+            {loading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analisi in corso...
+              </div>
+            )}
+
+            {error && (
+              <p className="text-sm text-red-600">{error}</p>
+            )}
+
+            {result && (
+              <div
+                className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed"
+                dangerouslySetInnerHTML={{
+                  __html: result
+                    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                    .replace(/\n/g, "<br/>")
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function ScadenzaBadge({ data }: { data: string | null }) {
@@ -161,6 +422,7 @@ export function GareListClient() {
   const [scadenza, setScadenza] = useState("")
   const [source,   setSource]   = useState<SourceKey | "all">("all")
   const [page,     setPage]     = useState(0)
+  const [showAiModal, setShowAiModal] = useState(false)
 
   const deferredSearch = useDeferredValue(search)
 
@@ -375,7 +637,21 @@ export function GareListClient() {
             Cancella filtri
           </Button>
         )}
+
+        {/* AI Settings button */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowAiModal(true)}
+          className="ml-auto gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          {getGeminiKey() ? "AI attiva" : "Configura AI"}
+        </Button>
       </div>
+
+      {/* AI Key Modal */}
+      {showAiModal && <AiKeyModal onClose={() => setShowAiModal(false)} />}
 
       {/* ── ANAC DB Panel ── */}
       {isAnacMode && (
@@ -585,6 +861,9 @@ function TenderCard({ tender }: { tender: TenderItem }) {
           Apri fonte <ExternalLink className="h-3 w-3" />
         </a>
       </div>
+
+      {/* AI Analysis */}
+      <AiAnalysisPanel tender={tender} />
     </div>
   )
 }
