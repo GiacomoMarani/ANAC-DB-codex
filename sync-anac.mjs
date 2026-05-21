@@ -97,6 +97,12 @@ const ANAC_COLUMNS = [
 
 // ── Mapping ───────────────────────────────────────────────────────────────────
 
+/** Tronca stringhe lunghe per rientrare nel limite varchar(4000) di Supabase */
+function trunc(val, max = 3990) {
+  if (!val || typeof val !== "string") return val || null;
+  return val.length > max ? val.slice(0, max) + "…" : val;
+}
+
 function mapToSupabase(row) {
   const tsMs = typeof row.data_pubblicazione === "number" ? row.data_pubblicazione : null;
   const dataPub = tsMs ? new Date(tsMs).toISOString().split("T")[0] : null;
@@ -106,16 +112,16 @@ function mapToSupabase(row) {
 
   return {
     cig: row.cig,
-    oggetto_gara: row.oggetto_bando || null,
+    oggetto_gara: trunc(row.oggetto_bando),
     importo_lotto: typeof row.importo_lotto === "number" ? row.importo_lotto : null,
-    oggetto_principale_contratto: row.oggetto_principale_contratto || null,
+    oggetto_principale_contratto: trunc(row.oggetto_principale_contratto),
     stato: "active",
-    provincia: row.provincia || null,
+    provincia: trunc(row.provincia),
     data_pubblicazione: dataPub,
     data_scadenza_offerta: dataScad,
-    sezione_regionale: row.sezione_regionale || null,
-    descrizione_cpv: row.cod_cpv || null,
-    denominazione_amministrazione_appaltante: row.denominazione_amministrazione_appaltante || null,
+    sezione_regionale: trunc(row.sezione_regionale),
+    descrizione_cpv: trunc(row.cod_cpv),
+    denominazione_amministrazione_appaltante: trunc(row.denominazione_amministrazione_appaltante),
     esito: null,
   };
 }

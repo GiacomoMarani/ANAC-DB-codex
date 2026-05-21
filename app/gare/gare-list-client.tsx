@@ -103,7 +103,7 @@ function setCachedAnalysis(id: string, result: string) {
   sessionStorage.setItem(AI_CACHE_PREFIX + id, result)
 }
 
-const GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite"] as const
+const GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-2.5-flash"] as const
 
 async function callGeminiModel(apiKey: string, model: string, prompt: string): Promise<string> {
   const res = await fetch(
@@ -130,7 +130,7 @@ async function callGeminiModel(apiKey: string, model: string, prompt: string): P
   return data.candidates?.[0]?.content?.parts?.[0]?.text || "Nessuna risposta generata."
 }
 
-async function analyzeWithGemini(apiKey: string, tender: TenderItem): Promise<string> {
+async function analyzeWithGemini(apiKey: string, tender: TenderItem, sourceUrl?: string): Promise<string> {
   const prompt = `Sei un esperto di appalti pubblici italiani. Analizza questo bando in modo chiaro e conciso:
 
 **Oggetto:** ${tender.oggetto || "Non specificato"}
@@ -140,6 +140,7 @@ async function analyzeWithGemini(apiKey: string, tender: TenderItem): Promise<st
 **Tipo contratto:** ${tender.tipo_contratto || "Non specificato"}
 **Scadenza offerte:** ${formatDate(tender.data_scadenza) || "Non specificata"}
 **Fonte:** ${tender.sources?.toUpperCase() || "Non specificata"}
+**Link bando:** ${sourceUrl || "Non disponibile"}
 
 Fornisci un'analisi strutturata:
 1. **Sintesi** — cosa richiede il bando in 2-3 frasi semplici
@@ -245,7 +246,7 @@ function AiKeyModal({ onClose }: { onClose: () => void }) {
 
 // ─── AI Analysis Panel (inline expandable) ───────────────────────────────────
 
-function AiAnalysisPanel({ tender }: { tender: TenderItem }) {
+function AiAnalysisPanel({ tender, sourceUrl }: { tender: TenderItem; sourceUrl?: string }) {
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading]   = useState(false)
   const [result, setResult]     = useState<string | null>(null)
@@ -270,7 +271,7 @@ function AiAnalysisPanel({ tender }: { tender: TenderItem }) {
     setExpanded(true)
 
     try {
-      const text = await analyzeWithGemini(apiKey, tender)
+      const text = await analyzeWithGemini(apiKey, tender, sourceUrl)
       setResult(text)
       setCachedAnalysis(tenderId, text)
     } catch (e) {
@@ -800,7 +801,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
 
       {/* Title */}
       <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="block group">
-        <h2 className="text-base font-semibold leading-snug group-hover:text-primary transition-colors line-clamp-2">
+        <h2 className="text-base font-semibold leading-snug group-hover:text-primary transition-colors">
           {tender.oggetto || "—"}
         </h2>
       </a>
@@ -869,7 +870,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
       </div>
 
       {/* AI Analysis */}
-      <AiAnalysisPanel tender={tender} />
+      <AiAnalysisPanel tender={tender} sourceUrl={sourceUrl} />
     </div>
   )
 }
