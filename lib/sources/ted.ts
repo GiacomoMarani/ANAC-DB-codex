@@ -193,14 +193,17 @@ export async function fetchTED(
     clauses.push(`publication-date>=${pubDateFilter}`)
   }
 
-  // Testo libero: usa ~ (contains) su campi titolo multipli
-  // NON usare parole senza campo (es: "lavori AND ...") — errore di sintassi TED
-  const textClause = q
-    ? `(title-lot~${q} OR notice-title~${q} OR announcement-title~${q})`
-    : null
+  // Testo libero: split parole e AND — ogni parola deve matchare in almeno un campo titolo
+  const textClauses: string[] = []
+  if (q) {
+    const words = q.trim().split(/\s+/).filter(Boolean)
+    for (const word of words) {
+      textClauses.push(`(title-lot~${word} OR notice-title~${word} OR announcement-title~${word})`)
+    }
+  }
 
   const expertQuery = [
-    ...(textClause ? [textClause] : []),
+    ...textClauses,
     ...clauses,
   ].join(" AND ")
 

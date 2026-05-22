@@ -75,12 +75,15 @@ export async function GET(request: NextRequest) {
     .order("id", { ascending: false })
     .range(offset, offset + pageSize - 1)
 
-  // Apply filters
+  // Apply filters — keyword search (AND logic: every word must match)
   if (q) {
-    const searchTerm = `%${q}%`
-    query = query.or(
-      `cig.ilike.${searchTerm},oggetto_gara.ilike.${searchTerm},descrizione_cpv.ilike.${searchTerm}`
-    )
+    const words = q.trim().split(/\s+/).filter(Boolean)
+    for (const word of words) {
+      const term = `%${word}%`
+      query = query.or(
+        `cig.ilike.${term},oggetto_gara.ilike.${term},descrizione_cpv.ilike.${term}`
+      )
+    }
   }
 
   if (provincia) {

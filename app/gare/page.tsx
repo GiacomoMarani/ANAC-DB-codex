@@ -14,9 +14,9 @@ export default function GarePage() {
     <div className="min-h-screen bg-background">
       {/* ── Navbar ── */}
       <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between">
-          <Link href="/gare" className="flex items-center gap-2 sm:gap-3 group">
-            <div className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-lg overflow-hidden shadow-sm ring-1 ring-black/5">
+        <div className="container mx-auto px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between">
+          <Link href="/gare" className="flex items-center gap-2.5 sm:gap-3 group">
+            <div className="relative h-10 w-10 sm:h-11 sm:w-11 rounded-xl overflow-hidden shadow-sm ring-1 ring-black/5">
               <Image
                 src="/logo.jpg"
                 alt="Tender AI DB"
@@ -26,10 +26,10 @@ export default function GarePage() {
               />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-bold tracking-tight leading-none group-hover:text-primary transition-colors">
+              <span className="text-base sm:text-lg font-bold tracking-tight leading-none group-hover:text-primary transition-colors">
                 Tender AI DB
               </span>
-              <span className="text-[10px] text-muted-foreground leading-tight">
+              <span className="text-[11px] sm:text-xs text-blue-500 font-medium uppercase tracking-wider leading-tight">
                 Motore di ricerca gare
               </span>
             </div>
