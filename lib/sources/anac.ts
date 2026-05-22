@@ -31,6 +31,7 @@
  */
 
 import type { NormalizedTender, SourceResult } from "./types"
+import { buildAnacCigUrl } from "./types"
 
 const ANAC_BASE    = "https://dati.anticorruzione.it"
 
@@ -84,7 +85,7 @@ export function mapAnacRow(row: Record<string, any>): NormalizedTender {
     descrizione_cpv:     row.cod_cpv ?? null,
     sources:             "anac",
     link_originale:      row.cig
-      ? `https://dati.anticorruzione.it/superset/recaptcha/?cig=${row.cig}&next=dettaglio_cig`
+      ? buildAnacCigUrl(row.cig)
       : null,
     stazione_appaltante: row.denominazione_amministrazione_appaltante ?? null,
   }

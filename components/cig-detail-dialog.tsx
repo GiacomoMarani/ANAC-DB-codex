@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ExternalLink } from "lucide-react"
+import { buildAnacCigUrl } from "@/lib/sources/types"
 
 interface CigRecord {
   id: number
@@ -129,7 +130,7 @@ export function CigDetailDialog({ cig, open, onOpenChange }: CigDetailDialogProp
 
           <div className="flex justify-end">
             <a
-              href={`https://dati.anticorruzione.it/superset/dashboard/dettaglio_cig/?cig=${cig.cig}`}
+              href={buildAnacCigUrl(cig.cig)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm text-primary hover:underline"

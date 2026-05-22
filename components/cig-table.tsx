@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChevronLeft, ChevronRight, ExternalLink, FileText } from "lucide-react"
+import { buildAnacCigUrl } from "@/lib/sources/types"
 import { useState } from "react"
 import { CigDetailDialog } from "./cig-detail-dialog"
 
@@ -130,7 +131,7 @@ export function CigTable({ data, totalCount, currentPage, totalPages }: CigTable
                   >
                     <TableCell className="font-mono text-sm">
                       <a
-                        href={`https://dati.anticorruzione.it/superset/dashboard/dettaglio_cig/?cig=${row.cig}`}
+                        href={buildAnacCigUrl(row.cig)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-primary hover:underline inline-flex items-center gap-1"

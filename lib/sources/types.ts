@@ -72,3 +72,17 @@ export interface SourceResult {
   source: SourceKey
   error?: string
 }
+
+/**
+ * Genera l'URL di dettaglio per un CIG sul portale ANAC.
+ *
+ * Il portale dati.anticorruzione.it (Superset) è attualmente fuori servizio
+ * (rate-limiting / WAF). Si usa la Piattaforma di Pubblicità a Valore Legale
+ * (pubblicitalegale.anticorruzione.it) che è attiva e stabile.
+ *
+ * Nota: la piattaforma è una SPA Angular che non supporta deep-link per CIG,
+ * quindi si rimanda alla pagina di ricerca con il CIG pre-compilato.
+ */
+export function buildAnacCigUrl(cig: string): string {
+  return `https://pubblicitalegale.anticorruzione.it/bandi/ricerca?testoLibero=${encodeURIComponent(cig)}`
+}

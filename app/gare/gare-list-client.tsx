@@ -15,7 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import type { SourceKey } from "@/lib/sources/types"
-import { SOURCE_LABELS, SOURCE_COLORS } from "@/lib/sources/types"
+import { SOURCE_LABELS, SOURCE_COLORS, buildAnacCigUrl } from "@/lib/sources/types"
 import type { NormalizedTender } from "@/lib/sources/types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -499,7 +499,7 @@ export function GareListClient() {
       descrizione_cpv:     row.descrizione_cpv ?? null,
       sources:             "anac",
       link_originale:      row.cig
-        ? `https://dati.anticorruzione.it/superset/recaptcha/?cig=${row.cig}&next=dettaglio_cig`
+        ? buildAnacCigUrl(row.cig)
         : null,
       stazione_appaltante: row.denominazione_amministrazione_appaltante ?? row.sezione_regionale ?? null,
     }))

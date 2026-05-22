@@ -6,6 +6,7 @@ import { ArrowLeft, Globe, Loader2, CheckCircle2, Circle, Search, Euro, Clock, X
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { buildAnacCigUrl } from "@/lib/sources/types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -363,7 +364,7 @@ export default function RicercaGarePage() {
                 )}
                 {tender.cig && (
                   <a
-                    href={`https://dati.anticorruzione.it/superset/dashboard/dettaglio_cig/?cig=${tender.cig}`}
+                    href={buildAnacCigUrl(tender.cig)}
                     target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1 hover:text-primary transition-colors"
                   >
