@@ -9,14 +9,14 @@ echo.
 echo [1/2] Sync bandi da ANAC (Superset)...
 node sync-anac.mjs
 if %ERRORLEVEL% NEQ 0 (
-  echo ⚠️  sync-anac.mjs terminato con errore (codice %ERRORLEVEL%) — continuo con UUID sync
+  echo [!] sync-anac.mjs terminato con errore (codice %ERRORLEVEL%) — continuo con UUID sync
 )
 
 echo.
 echo [2/2] Sync UUID da PVL (pubblicitalegale)...
 node sync-anac-uuid.mjs
 if %ERRORLEVEL% NEQ 0 (
-  echo ⚠️  sync-anac-uuid.mjs terminato con errore (codice %ERRORLEVEL%)
+  echo [!] sync-anac-uuid.mjs terminato con errore (codice %ERRORLEVEL%)
 )
 
 echo.
