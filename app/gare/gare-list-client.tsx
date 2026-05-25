@@ -499,7 +499,7 @@ export function GareListClient() {
       descrizione_cpv:     row.descrizione_cpv ?? null,
       sources:             "anac",
       link_originale:      row.cig
-        ? buildAnacCigUrl(row.cig)
+        ? buildAnacCigUrl(row.cig, row.anac_id_avviso)
         : null,
       stazione_appaltante: row.denominazione_amministrazione_appaltante ?? row.sezione_regionale ?? null,
     }))

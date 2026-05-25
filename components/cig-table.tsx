@@ -131,7 +131,7 @@ export function CigTable({ data, totalCount, currentPage, totalPages }: CigTable
                   >
                     <TableCell className="font-mono text-sm">
                       <a
-                        href={buildAnacCigUrl(row.cig)}
+                        href={buildAnacCigUrl(row.cig, row.anac_id_avviso as string | null)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-primary hover:underline inline-flex items-center gap-1"

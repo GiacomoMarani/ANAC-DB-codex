@@ -76,13 +76,15 @@ export interface SourceResult {
 /**
  * Genera l'URL di dettaglio per un CIG sul portale ANAC.
  *
- * Il portale dati.anticorruzione.it (Superset) è attualmente fuori servizio
- * (rate-limiting / WAF). Si usa la Piattaforma di Pubblicità a Valore Legale
- * (pubblicitalegale.anticorruzione.it) che è attiva e stabile.
+ * Se `anacIdAvviso` (UUID) è disponibile, genera un link diretto alla scheda:
+ *   https://pubblicitalegale.anticorruzione.it/bandi/{uuid}
  *
- * Nota: la piattaforma è una SPA Angular che non supporta deep-link per CIG,
- * quindi si rimanda alla pagina di ricerca con il CIG pre-compilato.
+ * Altrimenti rimanda alla pagina di ricerca avanzata.
  */
-export function buildAnacCigUrl(cig: string): string {
+export function buildAnacCigUrl(cig: string, anacIdAvviso?: string | null): string {
+  if (anacIdAvviso) {
+    return `https://pubblicitalegale.anticorruzione.it/bandi/${anacIdAvviso}?ricercaArchivio=false`
+  }
   return `https://pubblicitalegale.anticorruzione.it/bandi/ricerca?testoLibero=${encodeURIComponent(cig)}`
 }
+

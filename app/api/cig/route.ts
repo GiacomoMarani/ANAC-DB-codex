@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
       oggetto_principale_contratto,
       descrizione_cpv,
       denominazione_amministrazione_appaltante,
+      anac_id_avviso,
       esito
     `, { count: "exact" })
     .order("id", { ascending: false })

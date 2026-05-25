@@ -130,7 +130,7 @@ export function CigDetailDialog({ cig, open, onOpenChange }: CigDetailDialogProp
 
           <div className="flex justify-end">
             <a
-              href={buildAnacCigUrl(cig.cig)}
+              href={buildAnacCigUrl(cig.cig, cig.anac_id_avviso as string | null)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
