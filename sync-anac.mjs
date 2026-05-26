@@ -357,15 +357,30 @@ async function main() {
 
     // 6. Chiudi i bandi scaduti (in Supabase ma non più su ANAC)
     console.log("\n🧹 Pulizia bandi scaduti...");
-    const { data: existing, error: fetchErr } = await supabase
-      .from("cig")
-      .select("cig")
-      .eq("stato", "active");
 
-    if (fetchErr) {
-      console.error("  ❌ Errore lettura Supabase:", fetchErr.message);
-    } else if (existing) {
-      const stale = existing.filter((r) => !allCigs.has(r.cig)).map((r) => r.cig);
+    // Supabase restituisce max 1000 righe — paginiamo per prenderli tutti
+    let allActive = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data: batch, error: fetchErr } = await supabase
+        .from("cig")
+        .select("cig")
+        .eq("stato", "active")
+        .range(from, from + pageSize - 1);
+
+      if (fetchErr) {
+        console.error("  ❌ Errore lettura Supabase:", fetchErr.message);
+        break;
+      }
+      if (!batch || batch.length === 0) break;
+      allActive.push(...batch);
+      from += batch.length;
+      if (batch.length < pageSize) break;
+    }
+
+    if (allActive.length > 0) {
+      const stale = allActive.filter((r) => !allCigs.has(r.cig)).map((r) => r.cig);
 
       if (stale.length > 0) {
         // Aggiorna in batch da 100

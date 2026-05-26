@@ -101,8 +101,9 @@ function extractCigsFromAvviso(avviso) {
 
 // ── Fetch una pagina dall'API PVL ─────────────────────────────────────────────
 
-async function fetchPage(page, retries = 3) {
-  const url = `${PVL_API}?page=${page}&size=${PAGE_SIZE}&codiceScheda=2,4&sortField=dataPubblicazione&sortDirection=desc`;
+async function fetchPage(page, retries = 3, codiceScheda = "2,4") {
+  let url = `${PVL_API}?page=${page}&size=${PAGE_SIZE}&sortField=dataPubblicazione&sortDirection=desc`;
+  if (codiceScheda) url += `&codiceScheda=${codiceScheda}`;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -172,70 +173,71 @@ async function main() {
     return;
   }
 
-  // 2. Scarica i bandi attivi dall'API PVL e costruisci la mappa CIG → UUID
-  console.log("\n📡 Scaricamento bandi da pubblicitalegale.anticorruzione.it...");
-
+  // Stato condiviso tra i passaggi
   const cigToUuid = new Map();
-  let pageNum = 0;
   let totalAvvisi = 0;
   let resolvedCount = 0;
 
-  // Primo fetch per conoscere il totale
-  const firstPage = await fetchPage(0);
-  const totalElements = firstPage?.totalElements || 0;
-  const totalPages = Math.ceil(totalElements / PAGE_SIZE);
+  // Funzione di scansione riutilizzabile
+  async function scanPages(codiceScheda, label, maxPages = Infinity) {
+    const firstPage = await fetchPage(0, 3, codiceScheda);
+    const totalElements = firstPage?.totalElements || 0;
+    const totalPages = Math.min(Math.ceil(totalElements / PAGE_SIZE), maxPages);
 
-  console.log(`  📊 Totale avvisi (bandi attivi): ${totalElements} (~${totalPages} pagine)`);
+    console.log(`  📊 Totale avvisi (${label}): ${totalElements} (~${totalPages} pagine${maxPages < Infinity ? ', max ' + maxPages : ''})`);
 
-  // Processa la prima pagina
-  for (const avviso of firstPage?.content || []) {
-    const pairs = extractCigsFromAvviso(avviso);
-    for (const { cig, uuid } of pairs) {
-      if (needsUuid.has(cig) && !cigToUuid.has(cig)) {
-        cigToUuid.set(cig, uuid);
-        resolvedCount++;
-      }
-    }
-  }
-  totalAvvisi += (firstPage?.content || []).length;
-  process.stdout.write(`\r  📄 Pagina 1/${totalPages} — risolti: ${resolvedCount}/${needsUuid.size}`);
-
-  // Paginazione
-  for (pageNum = 1; pageNum < totalPages; pageNum++) {
-    // Se abbiamo già risolto tutto, stop
-    if (resolvedCount >= needsUuid.size) {
-      console.log(`\n  ✅ Tutti i CIG risolti! Interrompo alla pagina ${pageNum}.`);
-      break;
-    }
-
-    try {
-      const data = await fetchPage(pageNum);
-      const content = data?.content || [];
-      totalAvvisi += content.length;
-
-      for (const avviso of content) {
-        const pairs = extractCigsFromAvviso(avviso);
-        for (const { cig, uuid } of pairs) {
-          if (needsUuid.has(cig) && !cigToUuid.has(cig)) {
-            cigToUuid.set(cig, uuid);
-            resolvedCount++;
-          }
+    // Processa la prima pagina
+    for (const avviso of firstPage?.content || []) {
+      const pairs = extractCigsFromAvviso(avviso);
+      for (const { cig, uuid } of pairs) {
+        if (needsUuid.has(cig) && !cigToUuid.has(cig)) {
+          cigToUuid.set(cig, uuid);
+          resolvedCount++;
         }
       }
-
-      process.stdout.write(`\r  📄 Pagina ${pageNum + 1}/${totalPages} — risolti: ${resolvedCount}/${needsUuid.size}    `);
-
-      if (content.length < PAGE_SIZE) break; // fine dati
-
-      // Pausa tra le pagine per non sovraccaricare
-      await new Promise((r) => setTimeout(r, 300));
-    } catch (e) {
-      console.error(`\n  ❌ Errore pagina ${pageNum + 1}: ${e.message}`);
-      break;
     }
+    totalAvvisi += (firstPage?.content || []).length;
+    process.stdout.write(`\r  📄 Pagina 1/${totalPages} — risolti: ${resolvedCount}/${needsUuid.size}`);
+
+    // Paginazione
+    for (let p = 1; p < totalPages; p++) {
+      if (resolvedCount >= needsUuid.size) {
+        console.log(`\n  ✅ Tutti i CIG risolti! Interrompo alla pagina ${p}.`);
+        break;
+      }
+
+      try {
+        const data = await fetchPage(p, 3, codiceScheda);
+        const content = data?.content || [];
+        totalAvvisi += content.length;
+
+        for (const avviso of content) {
+          const pairs = extractCigsFromAvviso(avviso);
+          for (const { cig, uuid } of pairs) {
+            if (needsUuid.has(cig) && !cigToUuid.has(cig)) {
+              cigToUuid.set(cig, uuid);
+              resolvedCount++;
+            }
+          }
+        }
+
+        process.stdout.write(`\r  📄 Pagina ${p + 1}/${totalPages} — risolti: ${resolvedCount}/${needsUuid.size}    `);
+
+        if (content.length < PAGE_SIZE) break;
+        await new Promise((r) => setTimeout(r, 300));
+      } catch (e) {
+        console.error(`\n  ❌ Errore pagina ${p + 1}: ${e.message}`);
+        break;
+      }
+    }
+    console.log("");
   }
 
-  console.log(`\n\n📥 Avvisi scansionati: ${totalAvvisi}`);
+  // ── PASSAGGIO 1: codiceScheda=2,4 (bandi e avvisi di indizione) ────────────
+  console.log("\n📡 Scaricamento bandi da pubblicitalegale.anticorruzione.it...");
+  await scanPages("2,4", "codiceScheda=2,4");
+
+  console.log(`\n📥 Avvisi scansionati: ${totalAvvisi}`);
   console.log(`🔗 CIG risolti: ${cigToUuid.size}/${needsUuid.size}`);
 
   // 3. Aggiorna Supabase con gli UUID trovati

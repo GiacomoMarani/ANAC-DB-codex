@@ -85,7 +85,7 @@ export function buildAnacCigUrl(cig: string, anacIdAvviso?: string | null): stri
   if (anacIdAvviso) {
     return `https://pubblicitalegale.anticorruzione.it/bandi/${anacIdAvviso}?ricercaArchivio=false`
   }
-  // Fallback: BDNCP "Ricerca per CIG" tab
-  return `https://dati.anticorruzione.it/superset/dashboard/appalti/?native_filters_key=3G_GVU0mcCF3VILlobyZTtCc5NnD5bGp11A1Ir5dy7si8PIB6degIlCRxF-O7SZE13`
+  // Fallback: Google search per il CIG sul sito PVL
+  return `https://www.google.com/search?q=site:pubblicitalegale.anticorruzione.it+${encodeURIComponent(cig)}`
 }
 
