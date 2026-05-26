@@ -141,27 +141,39 @@ async function main() {
   if (FORCE) console.log(`  🔄 Modalità force: riscrittura UUID esistenti`);
   console.log("");
 
-  // 1. Carica i CIG attivi da Supabase che hanno bisogno dell'UUID
+  // 1. Carica i CIG attivi da Supabase che hanno bisogno dell'UUID (paginato)
   console.log("📋 Caricamento CIG attivi da Supabase...");
 
-  let query = supabase
-    .from("cig")
-    .select("cig, anac_id_avviso")
-    .eq("stato", "active");
+  const allCigs = [];
+  const SB_PAGE = 1000;
+  let sbOffset = 0;
 
-  if (!FORCE) {
-    query = query.is("anac_id_avviso", null);
-  }
+  while (true) {
+    let query = supabase
+      .from("cig")
+      .select("cig, anac_id_avviso")
+      .eq("stato", "active")
+      .range(sbOffset, sbOffset + SB_PAGE - 1);
 
-  const { data: cigsToResolve, error: fetchErr } = await query;
+    if (!FORCE) {
+      query = query.is("anac_id_avviso", null);
+    }
 
-  if (fetchErr) {
-    console.error("❌ Errore lettura Supabase:", fetchErr.message);
-    process.exit(1);
+    const { data, error: fetchErr } = await query;
+
+    if (fetchErr) {
+      console.error("❌ Errore lettura Supabase:", fetchErr.message);
+      process.exit(1);
+    }
+
+    if (!data || data.length === 0) break;
+    allCigs.push(...data);
+    if (data.length < SB_PAGE) break;
+    sbOffset += SB_PAGE;
   }
 
   const needsUuid = new Set(
-    (cigsToResolve || [])
+    allCigs
       .slice(0, MAX_LIMIT)
       .map((r) => r.cig)
   );
@@ -233,12 +245,67 @@ async function main() {
     console.log("");
   }
 
-  // ── PASSAGGIO 1: codiceScheda=2,4 (bandi e avvisi di indizione) ────────────
-  console.log("\n📡 Scaricamento bandi da pubblicitalegale.anticorruzione.it...");
+  // ── PASSAGGIO 1: codiceScheda=2,4 (bulk scan) ──────────────────────────────
+  console.log("\n📡 Passaggio 1: Scansione bulk (codiceScheda=2,4)...");
   await scanPages("2,4", "codiceScheda=2,4");
 
   console.log(`\n📥 Avvisi scansionati: ${totalAvvisi}`);
-  console.log(`🔗 CIG risolti: ${cigToUuid.size}/${needsUuid.size}`);
+  console.log(`🔗 CIG risolti dopo passaggio 1: ${cigToUuid.size}/${needsUuid.size}`);
+
+  // ── PASSAGGIO 2: lookup puntuale per CIG non trovati (max 500 per run) ──────
+  const missing = [...needsUuid].filter((cig) => !cigToUuid.has(cig));
+  const LOOKUP_LIMIT = 500;
+  const lookupBatch = missing.slice(0, LOOKUP_LIMIT);
+
+  if (lookupBatch.length > 0) {
+    console.log(`\n📡 Passaggio 2: Keyword lookup per ${lookupBatch.length}/${missing.length} CIG mancanti...`);
+    let lookupResolved = 0;
+
+    for (let i = 0; i < lookupBatch.length; i++) {
+      const cig = lookupBatch[i];
+      try {
+        // Usa keywords=CIG con codiceScheda=4 per trovare bandi P1_16 etc.
+        const url = `${PVL_API}?keywords=${encodeURIComponent(cig)}&codiceScheda=4&size=5&page=0`;
+        const res = await fetch(url, {
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(10_000),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          for (const avviso of data.content || []) {
+            if (!avviso.attivo) continue;
+            const pairs = extractCigsFromAvviso(avviso);
+            const match = pairs.find((p) => p.cig === cig);
+            if (match) {
+              cigToUuid.set(cig, match.uuid);
+              resolvedCount++;
+              lookupResolved++;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Skip errori singoli
+      }
+
+      if ((i + 1) % 50 === 0 || i === lookupBatch.length - 1) {
+        process.stdout.write(`\r  🔍 ${i + 1}/${lookupBatch.length} cercati — trovati: ${lookupResolved}`);
+      }
+
+      // Pausa breve per non sovraccaricare
+      if ((i + 1) % 10 === 0) {
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    }
+
+    console.log(`\n  ✅ Passaggio 2: ${lookupResolved} UUID trovati tramite keyword lookup`);
+    if (missing.length > LOOKUP_LIMIT) {
+      console.log(`  ℹ️  ${missing.length - LOOKUP_LIMIT} CIG rimanenti verranno cercati nei prossimi run`);
+    }
+  }
+
+  console.log(`\n🔗 CIG risolti totali: ${cigToUuid.size}/${needsUuid.size}`);
 
   // 3. Aggiorna Supabase con gli UUID trovati
   if (cigToUuid.size === 0) {
