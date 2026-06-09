@@ -79,13 +79,13 @@ export interface SourceResult {
  * Se `anacIdAvviso` (UUID) è disponibile, genera un link diretto alla scheda:
  *   https://pubblicitalegale.anticorruzione.it/bandi/{uuid}
  *
- * Altrimenti rimanda alla pagina di ricerca avanzata.
+ * Altrimenti rimanda al portale dati aperti ANAC (dati.anticorruzione.it).
  */
 export function buildAnacCigUrl(cig: string, anacIdAvviso?: string | null): string {
   if (anacIdAvviso) {
     return `https://pubblicitalegale.anticorruzione.it/bandi/${anacIdAvviso}?ricercaArchivio=false`
   }
-  // Fallback: Google search per il CIG sul sito PVL
-  return `https://www.google.com/search?q=site:pubblicitalegale.anticorruzione.it+${encodeURIComponent(cig)}`
+  // Fallback: dettaglio CIG su portale dati aperti ANAC
+  return `https://dettaglio-cig.anticorruzione.it/cig/${encodeURIComponent(cig)}`
 }
 
