@@ -54,7 +54,11 @@ const ALL_SOURCES: { value: SourceKey | "all"; label: string; flag?: string }[] 
   { value: "all",          label: "Tutte le fonti" },
   { value: "anac",         label: "ANAC (Bandi in corso)", flag: "🏛️" },
   { value: "ted",          label: "TED Europa",             flag: "🇪🇺" },
-  { value: "cato",         label: "CATO (aggregato)",       flag: "📡" },
+  { value: "sintel",       label: "Sintel",                 flag: "📡" },
+  { value: "mepa",         label: "MePA",                   flag: "📡" },
+  { value: "start_toscana", label: "Start Toscana",         flag: "📡" },
+  { value: "halleyweb",    label: "Halley Web",             flag: "📡" },
+  { value: "place_vda",    label: "Valle d'Aosta",          flag: "📡" },
 ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -104,66 +108,161 @@ function setCachedAnalysis(id: string, result: string) {
   sessionStorage.setItem(AI_CACHE_PREFIX + id, result)
 }
 
-const GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-2.5-flash"] as const
+class QuotaError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "QuotaError"
+  }
+}
 
-async function callGeminiModel(apiKey: string, model: string, prompt: string): Promise<string> {
+const GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"] as const
+
+interface GeminiResult {
+  text: string
+  sources: { title: string; url: string }[]
+}
+
+async function callGeminiModel(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  useSearch = false,
+): Promise<GeminiResult> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body: any = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 2048,
+    },
+  }
+
+  // Abilita Google Search grounding per cercare link reali
+  if (useSearch) {
+    body.tools = [{ google_search: {} }]
+  }
+
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 1024,
-        },
-      }),
+      body: JSON.stringify(body),
     },
   )
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: { message: res.statusText } }))
-    throw new Error(err.error?.message || `Errore API Gemini (${model}): ${res.status}`)
+    const msg = err.error?.message || `Errore API Gemini (${model}): ${res.status}`
+
+    // Quota esaurita → errore specifico con messaggio chiaro
+    if (res.status === 429 || msg.toLowerCase().includes("quota")) {
+      // Estrai tempo di retry se presente (es. "retry in 16.4s")
+      const retryMatch = msg.match(/retry in ([\d.]+)s/i)
+      const retrySec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : null
+      const retryHint = retrySec ? ` Riprova tra ${retrySec} secondi.` : ""
+      throw new QuotaError(
+        `Quota API esaurita per ${model}.${retryHint} Verifica il tuo piano su ai.google.dev.`
+      )
+    }
+
+    throw new Error(msg)
   }
 
   const data = await res.json()
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "Nessuna risposta generata."
+  const candidate = data.candidates?.[0]
+  const text = candidate?.content?.parts?.[0]?.text || "Nessuna risposta generata."
+
+  // Estrai fonti dal grounding metadata
+  const sources: { title: string; url: string }[] = []
+  const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
+  const seen = new Set<string>()
+  for (const chunk of chunks) {
+    const uri   = chunk?.web?.uri
+    const title = chunk?.web?.title
+    if (uri && !seen.has(uri)) {
+      seen.add(uri)
+      sources.push({ title: title || uri, url: uri })
+    }
+  }
+
+  return { text, sources }
 }
 
 async function analyzeWithGemini(apiKey: string, tender: TenderItem, sourceUrl?: string): Promise<string> {
-  const prompt = `Sei un esperto di appalti pubblici italiani. Analizza questo bando in modo chiaro e conciso:
+  const cigCode = getCigCode(tender.cig)
+  const prompt = `Sei un esperto di appalti pubblici italiani. Analizza questo bando e CERCA SUL WEB informazioni aggiornate.
 
-**Oggetto:** ${tender.oggetto || "Non specificato"}
-**Importo stimato:** ${formatCurrency(tender.importo) || "Non specificato"}
-**Stazione appaltante:** ${tender.stazione_appaltante || "Non specificata"}
-**CPV:** ${tender.descrizione_cpv || "Non specificato"}
-**Tipo contratto:** ${tender.tipo_contratto || "Non specificato"}
-**Scadenza offerte:** ${formatDate(tender.data_scadenza) || "Non specificata"}
-**Fonte:** ${tender.sources?.toUpperCase() || "Non specificata"}
-**Link bando:** ${sourceUrl || "Non disponibile"}
+**Dati disponibili:**
+- Oggetto: ${tender.oggetto || "Non specificato"}
+- CIG: ${cigCode !== "—" ? cigCode : "Non disponibile"}
+- Importo stimato: ${formatCurrency(tender.importo) || "Non specificato"}
+- Stazione appaltante: ${tender.stazione_appaltante || "Non specificata"}
+- CPV: ${tender.descrizione_cpv || "Non specificato"}
+- Tipo contratto: ${tender.tipo_contratto || "Non specificato"}
+- Scadenza offerte: ${formatDate(tender.data_scadenza) || "Non specificata"}
+- Fonte: ${tender.sources?.toUpperCase() || "Non specificata"}
+- Link fonte: ${sourceUrl || "Non disponibile"}
 
-Fornisci un'analisi strutturata:
+Cerca sul web e fornisci un'analisi strutturata:
+
 1. **Sintesi** — cosa richiede il bando in 2-3 frasi semplici
-2. **Settore** — a quale settore industriale si rivolge
-3. **Requisiti probabili** — quali certificazioni/requisiti servono tipicamente per partecipare
-4. **Rischi e opportunità** — valutazione rapida del bando
-5. **Consiglio** — se vale la pena approfondire e perché
 
+2. **Date chiave** — elenca tutte le date importanti trovate:
+   - Data pubblicazione
+   - Scadenza presentazione offerte
+   - Data apertura buste (se disponibile)
+   - Eventuali proroghe
+
+3. **Link utili** — cerca e fornisci i link diretti a:
+   - Pagina ufficiale del bando sulla piattaforma di e-procurement
+   - Pagina di download della documentazione di gara
+   - Disciplinare, capitolato, modelli di partecipazione se trovati
+   - Eventuali chiarimenti/FAQ pubblicati
+
+4. **Dove scaricare la documentazione** — indica esattamente su quale piattaforma e in quale sezione trovare i documenti di gara (es. Sintel, MePA, Start Toscana, sito della stazione appaltante)
+
+5. **Requisiti di partecipazione** — requisiti tecnici, economici e certificazioni necessarie
+
+6. **Consiglio rapido** — se vale la pena approfondire e perché
+
+IMPORTANTE: Includi sempre gli URL completi che trovi. Se non trovi un link, indicalo chiaramente.
 Rispondi in italiano, in modo professionale ma accessibile.`
 
-  // Prova il modello primario, fallback sul lite se fallisce
+  // Prova i modelli in ordine, fallback al successivo se il modello non è disponibile
+  // Se è un errore di quota, prova il modello successivo (più leggero = meno quota)
+  let lastError: Error | null = null
   for (let i = 0; i < GEMINI_MODELS.length; i++) {
     try {
-      return await callGeminiModel(apiKey, GEMINI_MODELS[i], prompt)
+      const result = await callGeminiModel(apiKey, GEMINI_MODELS[i], prompt, true)
+
+      // Componi il testo finale con le fonti trovate
+      let output = result.text
+
+      if (result.sources.length > 0) {
+        output += "\n\n---\n\n### 🔗 Fonti trovate\n"
+        for (const src of result.sources) {
+          output += `- [${src.title}](${src.url})\n`
+        }
+      }
+
+      return output
     } catch (e) {
-      // Se è l'ultimo modello, rilancia l'errore
-      if (i === GEMINI_MODELS.length - 1) throw e
-      // Altrimenti prova il prossimo modello
-      console.warn(`Modello ${GEMINI_MODELS[i]} non disponibile, fallback su ${GEMINI_MODELS[i + 1]}`)
+      lastError = e instanceof Error ? e : new Error(String(e))
+      if (i < GEMINI_MODELS.length - 1) {
+        console.warn(`Modello ${GEMINI_MODELS[i]} non disponibile, fallback su ${GEMINI_MODELS[i + 1]}`)
+      }
     }
   }
-  throw new Error("Nessun modello Gemini disponibile")
+
+  // Tutti i modelli falliti
+  if (lastError instanceof QuotaError) {
+    throw new Error(
+      "⚠️ Quota API Gemini esaurita su tutti i modelli. " +
+      "Attendi qualche minuto oppure passa a un piano a pagamento su ai.google.dev/pricing"
+    )
+  }
+  throw lastError ?? new Error("Nessun modello Gemini disponibile")
 }
 
 // ─── AI Settings Modal ──────────────────────────────────────────────────────
@@ -249,11 +348,23 @@ function AiKeyModal({ onClose }: { onClose: () => void }) {
 
 function renderAiHtml(md: string): string {
   return md
+    // Separatore orizzontale
+    .replace(/^---$/gm, '<hr class="border-amber-200 dark:border-amber-800/40 my-3" />')
+    // Titoli
     .replace(/^#{1,4}\s+(.+)$/gm, '<div class="font-semibold text-amber-800 dark:text-amber-300 mt-3 mb-1">$1</div>')
+    // Bold
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    // Italic
     .replace(/(?<![*])\*(?![*])(.*?)\*(?![*])/g, '<em>$1</em>')
+    // Markdown links [text](url)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-0.5">$1 ↗</a>')
+    // Bare URLs
+    .replace(/(?<!["=])(https?:\/\/[^\s<,)]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline break-all">$1 ↗</a>')
+    // Numbered lists
     .replace(/^(\d+)\.\s+(.+)$/gm, '<div class="flex gap-2 ml-1"><span class="text-amber-500 font-semibold shrink-0">$1.</span><span>$2</span></div>')
+    // Bullet lists
     .replace(/^[-•]\s+(.+)$/gm, '<div class="flex gap-2 ml-3"><span class="text-amber-400">•</span><span>$1</span></div>')
+    // Line breaks
     .replace(/\n/g, '<br/>')
     .replace(/(<br\/>){3,}/g, '<br/><br/>')
 }
@@ -454,7 +565,7 @@ export function GareListClient() {
   const isAllMode  = source === "all"
   // Fetch ANAC quando è selezionato "anac" O "tutte le fonti"
   const needAnac   = isAnacMode || isAllMode
-  // Fetch TED/CATO quando NON è "anac" (cioè "all", "ted", "cato")
+  // Fetch TED/CATO quando NON è "anac" (cioè "all", "ted", sotto-fonti CATO)
   const needTenders = !isAnacMode
 
   // ── Query string per ANAC (Supabase /api/cig) ─────────────────────────────
