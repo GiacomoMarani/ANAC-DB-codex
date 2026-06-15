@@ -57,6 +57,24 @@ const IMPORTO_RANGES: Record<string, { gte?: number; lte?: number }> = {
   "> €5M":        { gte: 5_000_000 },
 }
 
+function getPublicationCutoffDate(value: string): string | null {
+  const match = value.trim().toLowerCase().match(/^(\d+)(h|d)?$/)
+  if (!match) return null
+
+  const amount = Number.parseInt(match[1], 10)
+  const unit = match[2] ?? "d"
+  if (!Number.isFinite(amount) || amount <= 0) return null
+
+  const cutoff = new Date()
+  if (unit === "h") {
+    cutoff.setHours(cutoff.getHours() - amount)
+  } else {
+    cutoff.setDate(cutoff.getDate() - amount)
+  }
+
+  return cutoff.toISOString().slice(0, 10)
+}
+
 export interface AnacFetchParams {
   q?:        string
   page?:     number
@@ -64,6 +82,7 @@ export interface AnacFetchParams {
   anno?:     number
   tipo?:     string
   importo?:  string
+  pubblicazione?: string
   provincia?: string
   /** Se true usa il datasource BANDI_IN_CORSO (ds id=81) */
   inCorso?:  boolean
@@ -102,6 +121,7 @@ export function buildAnacPayload(params: AnacFetchParams) {
     anno     = new Date().getFullYear(),
     tipo,
     importo,
+    pubblicazione,
     provincia,
     inCorso  = false,
   } = params
@@ -125,6 +145,9 @@ export function buildAnacPayload(params: AnacFetchParams) {
   const ir = importo ? IMPORTO_RANGES[importo] : null
   if (ir?.gte != null) filters.push({ col: "importo_lotto", op: ">=", val: ir.gte })
   if (ir?.lte != null) filters.push({ col: "importo_lotto", op: "<=", val: ir.lte })
+
+  const publicationCutoff = pubblicazione ? getPublicationCutoffDate(pubblicazione) : null
+  if (publicationCutoff) filters.push({ col: "data_pubblicazione", op: ">=", val: publicationCutoff })
 
   // Colonne diverse per datasource 81 (BANDI_IN_CORSO) vs 83 (APPALTI)
   const columns = inCorso

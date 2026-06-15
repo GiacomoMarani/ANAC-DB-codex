@@ -25,6 +25,28 @@ const IMPORTO_TO_TED: Record<string, { gte?: number; lte?: number }> = {
   "> €5M":        { gte: 5_000_000 },
 }
 
+function getPublicationCutoff(value: string): Date | null {
+  const match = value.trim().toLowerCase().match(/^(\d+)(h|d)?$/)
+  if (!match) return null
+
+  const amount = Number.parseInt(match[1], 10)
+  const unit = match[2] ?? "d"
+  if (!Number.isFinite(amount) || amount <= 0) return null
+
+  const cutoff = new Date()
+  if (unit === "h") {
+    cutoff.setHours(cutoff.getHours() - amount)
+  } else {
+    cutoff.setDate(cutoff.getDate() - amount)
+  }
+
+  return cutoff
+}
+
+function formatTedDate(date: Date): string {
+  return date.toISOString().split("T")[0].replace(/-/g, "")
+}
+
 // Estrae il testo dalla struttura multilingua di TED (preferenza: ita > eng > primo disponibile)
 function extractLang(obj: Record<string, string[]> | string[] | string | null | undefined): string | null {
   if (!obj) return null
@@ -134,6 +156,7 @@ export interface TedFetchParams {
   pageSize?: number
   importo?:  string
   scadenza?: string
+  pubblicazione?: string
   tipo?:     string
   onlyIT?:   boolean
 }
@@ -142,7 +165,7 @@ export async function fetchTED(
   params: TedFetchParams,
   apiKey: string,
 ): Promise<SourceResult> {
-  const { q, page = 0, pageSize = 10, importo, scadenza, tipo, onlyIT = true } = params
+  const { q, page = 0, pageSize = 10, importo, scadenza, pubblicazione, tipo, onlyIT = true } = params
 
   // Expert Search Query Language di TED v3
   const clauses: string[] = []
@@ -175,6 +198,11 @@ export async function fetchTED(
     }
   }
 
+  const publicationCutoff = pubblicazione ? getPublicationCutoff(pubblicazione) : null
+  if (publicationCutoff) {
+    clauses.push(`publication-date>=${formatTedDate(publicationCutoff)}`)
+  }
+
   const importoRange = importo ? IMPORTO_TO_TED[importo] : null
   if (importoRange?.gte != null) clauses.push(`total-value>=${importoRange.gte}`)
   if (importoRange?.lte != null) clauses.push(`total-value<=${importoRange.lte}`)
@@ -186,7 +214,7 @@ export async function fetchTED(
   // deadline-date-lot è presente solo per ~10% dei bandi TED (il resto lo ha solo nella pagina web, non nell'API)
   // Usiamo publication-date degli ultimi 2 mesi + scope ACTIVE come proxy ragionevole
   // per gare ancora aperte: un bando pubblicato < 2 mesi fa con scope ACTIVE è probabilmente attivo
-  if (!scadenza) {
+  if (!scadenza && !pubblicazione) {
     const twoMonthsAgo = new Date()
     twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2)
     const pubDateFilter = twoMonthsAgo.toISOString().split("T")[0].replace(/-/g, "")

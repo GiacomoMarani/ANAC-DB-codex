@@ -36,6 +36,24 @@ function getTodayDateString(timeZone = "Europe/Rome"): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+function getPublicationCutoffDate(value: string): string | null {
+  const match = value.trim().toLowerCase().match(/^(\d+)(h|d)?$/)
+  if (!match) return null
+
+  const amount = Number.parseInt(match[1], 10)
+  const unit = match[2] ?? "d"
+  if (!Number.isFinite(amount) || amount <= 0) return null
+
+  const cutoff = new Date()
+  if (unit === "h") {
+    cutoff.setHours(cutoff.getHours() - amount)
+  } else {
+    cutoff.setDate(cutoff.getDate() - amount)
+  }
+
+  return cutoff.toISOString().slice(0, 10)
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   
@@ -48,6 +66,7 @@ export async function GET(request: NextRequest) {
   const importo_min = searchParams.get("importo_min") || ""
   const importo_max = searchParams.get("importo_max") || ""
   const non_scadute = searchParams.get("non_scadute") || ""
+  const pubblicazione = searchParams.get("pubblicazione") || ""
   const page = Number(searchParams.get("page")) || 1
   const pageSize = 20
   const offset = (page - 1) * pageSize
@@ -114,6 +133,13 @@ export async function GET(request: NextRequest) {
       query = query
         .gte("data_pubblicazione", `${year}-01-01`)
         .lte("data_pubblicazione", `${year}-12-31`)
+    }
+  }
+
+  if (pubblicazione) {
+    const cutoffDate = getPublicationCutoffDate(pubblicazione)
+    if (cutoffDate) {
+      query = query.gte("data_pubblicazione", cutoffDate)
     }
   }
 

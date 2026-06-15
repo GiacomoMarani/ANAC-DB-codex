@@ -38,6 +38,38 @@ const CATO_SOURCE_MAP: Partial<Record<SourceKey, string>> = {
   // anac: usa fetchANAC diretto
 }
 
+function getPublicationCutoff(value: string): Date | null {
+  const match = value.trim().toLowerCase().match(/^(\d+)(h|d)?$/)
+  if (!match) return null
+
+  const amount = Number.parseInt(match[1], 10)
+  const unit = match[2] ?? "d"
+  if (!Number.isFinite(amount) || amount <= 0) return null
+
+  const cutoff = new Date()
+  if (unit === "h") {
+    cutoff.setHours(cutoff.getHours() - amount)
+  } else {
+    cutoff.setDate(cutoff.getDate() - amount)
+  }
+
+  return cutoff
+}
+
+function isPublishedSince(value: string | null, cutoff: Date, now = new Date()): boolean {
+  if (!value) return false
+  const text = value.trim()
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const dayStart = new Date(`${text}T00:00:00`).getTime()
+    const dayEnd = new Date(`${text}T23:59:59.999`).getTime()
+    return !Number.isNaN(dayStart) && !Number.isNaN(dayEnd) && dayEnd >= cutoff.getTime() && dayStart <= now.getTime()
+  }
+
+  const publishedAt = new Date(text).getTime()
+  return !Number.isNaN(publishedAt) && publishedAt >= cutoff.getTime() && publishedAt <= now.getTime()
+}
+
 async function resolveSource(
   key: SourceKey,
   commonParams: Parameters<typeof fetchCato>[0],
@@ -55,6 +87,7 @@ async function resolveSource(
         pageSize: commonParams.pageSize ?? 10,
         tipo:     commonParams.tipo,
         importo:  commonParams.importo,
+        pubblicazione: commonParams.pubblicazione,
         inCorso:  true,   // usa BANDI_IN_CORSO (ds 81) — già filtrati per bandi aperti
       })
     }
@@ -84,6 +117,7 @@ export async function GET(request: NextRequest) {
   const tipo     = sp.get("tipo") ?? undefined
   const importo  = sp.get("importo") ?? undefined
   const scadenza = sp.get("scadenza") ?? undefined
+  const pubblicazione = sp.get("pubblicazione") ?? undefined
 
   // Multi-valore: ?source=ted&source=cato
   const rawSources = sp.getAll("source")
@@ -93,7 +127,7 @@ export async function GET(request: NextRequest) {
 
   const tedKey = process.env.TED_API_KEY ?? ""
 
-  const commonParams = { q, page, importo, scadenza, tipo }
+  const commonParams = { q, page, importo, scadenza, tipo, pubblicazione }
 
   // Fan-out parallelo su tutte le fonti richieste
   const results = await Promise.all(
@@ -102,7 +136,7 @@ export async function GET(request: NextRequest) {
 
   // Merge risultati (interleaved per fonte se multi-fonte, altrimenti lineare)
   let allItems = results.flatMap(r => r.items)
-  const totalItems = results.reduce((acc, r) => acc + r.total, 0)
+  let totalItems = results.reduce((acc, r) => acc + r.total, 0)
   const errors = results.filter(r => r.error).map(r => ({ source: r.source, error: r.error }))
 
   // De-duplication leggera per oggetto simile (stesso cig se disponibile)
@@ -120,6 +154,12 @@ export async function GET(request: NextRequest) {
     if (!item.data_scadenza) return true          // senza scadenza → tieni
     return item.data_scadenza >= now.slice(0, 10) // confronto YYYY-MM-DD
   })
+
+  const publicationCutoff = pubblicazione ? getPublicationCutoff(pubblicazione) : null
+  if (publicationCutoff) {
+    allItems = allItems.filter(item => isPublishedSince(item.data_pubblicazione, publicationCutoff))
+    totalItems = allItems.length
+  }
 
   // Ordinamento: prima bandi con scadenza (dalla più vicina), poi quelli senza
   allItems.sort((a, b) => {

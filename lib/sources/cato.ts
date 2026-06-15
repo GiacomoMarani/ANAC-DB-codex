@@ -39,9 +39,42 @@ export interface CatoFetchParams {
   pageSize?: number
   importo?:  string
   scadenza?: string
+  pubblicazione?: string
   tipo?:     string
   /** Fonte specifica da passare a Cato (es. "sintel", "start_toscana") */
   source?:   string
+}
+
+function getPublicationCutoff(value: string): Date | null {
+  const match = value.trim().toLowerCase().match(/^(\d+)(h|d)?$/)
+  if (!match) return null
+
+  const amount = Number.parseInt(match[1], 10)
+  const unit = match[2] ?? "d"
+  if (!Number.isFinite(amount) || amount <= 0) return null
+
+  const cutoff = new Date()
+  if (unit === "h") {
+    cutoff.setHours(cutoff.getHours() - amount)
+  } else {
+    cutoff.setDate(cutoff.getDate() - amount)
+  }
+
+  return cutoff
+}
+
+function isPublishedSince(value: string | null, cutoff: Date, now = new Date()): boolean {
+  if (!value) return false
+  const text = value.trim()
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const dayStart = new Date(`${text}T00:00:00`).getTime()
+    const dayEnd = new Date(`${text}T23:59:59.999`).getTime()
+    return !Number.isNaN(dayStart) && !Number.isNaN(dayEnd) && dayEnd >= cutoff.getTime() && dayStart <= now.getTime()
+  }
+
+  const publishedAt = new Date(text).getTime()
+  return !Number.isNaN(publishedAt) && publishedAt >= cutoff.getTime() && publishedAt <= now.getTime()
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,7 +143,7 @@ export async function fetchCato(
   params: CatoFetchParams,
   defaultSource: SourceKey = "cato",
 ): Promise<SourceResult> {
-  const { q, page = 0, importo, scadenza, tipo, source } = params
+  const { q, page = 0, importo, scadenza, pubblicazione, tipo, source } = params
 
   const p = new URLSearchParams()
   p.set("p", String(page))
@@ -160,13 +193,18 @@ export async function fetchCato(
   }
 
   const raw   = await res.json()
-  const items = (raw.items ?? raw.data ?? []).map((i: unknown) =>
+  let items = (raw.items ?? raw.data ?? []).map((i: unknown) =>
     mapCatoItem(i, defaultSource),
   )
 
+  const publicationCutoff = pubblicazione ? getPublicationCutoff(pubblicazione) : null
+  if (publicationCutoff) {
+    items = items.filter((item: NormalizedTender) => isPublishedSince(item.data_pubblicazione, publicationCutoff))
+  }
+
   return {
     items,
-    total:  raw.total ?? items.length,
+    total:  publicationCutoff ? items.length : raw.total ?? items.length,
     source: defaultSource,
   }
 }

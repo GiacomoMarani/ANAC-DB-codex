@@ -14,6 +14,7 @@ import { Badge }   from "@/components/ui/badge"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 import type { SourceKey } from "@/lib/sources/types"
 import { SOURCE_LABELS, SOURCE_COLORS, buildAnacCigUrl } from "@/lib/sources/types"
 import type { NormalizedTender } from "@/lib/sources/types"
@@ -79,6 +80,24 @@ function daysUntil(d: string | null): number | null {
   if (!d) return null
   const diff = new Date(d).getTime() - Date.now()
   return Math.ceil(diff / 86_400_000)
+}
+
+function isPublishedWithinHours(d: string | null, hours: number): boolean {
+  if (!d) return false
+  const value = d.trim()
+  const now = Date.now()
+  const cutoff = now - hours * 3_600_000
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const dayStart = new Date(`${value}T00:00:00`).getTime()
+    const dayEnd = new Date(`${value}T23:59:59.999`).getTime()
+    if (Number.isNaN(dayStart) || Number.isNaN(dayEnd)) return false
+    return dayEnd >= cutoff && dayStart <= now
+  }
+
+  const publishedAt = new Date(value).getTime()
+  if (Number.isNaN(publishedAt)) return false
+  return publishedAt >= cutoff && publishedAt <= now
 }
 
 // ─── AI Analysis Helpers ─────────────────────────────────────────────────────
@@ -555,6 +574,7 @@ export function GareListClient() {
   const [tipo,     setTipo]     = useState("")
   const [importo,  setImporto]  = useState("")
   const [scadenza, setScadenza] = useState("")
+  const [pubblicazione, setPubblicazione] = useState("")
   const [source,   setSource]   = useState<SourceKey | "all">("all")
   const [page,     setPage]     = useState(0)
   const [showAiModal, setShowAiModal] = useState(false)
@@ -584,8 +604,9 @@ export function GareListClient() {
       if (range?.min != null) params.set("importo_min", String(range.min))
       if (range?.max != null) params.set("importo_max", String(range.max))
     }
+    if (pubblicazione && pubblicazione !== "all") params.set("pubblicazione", pubblicazione)
     return params.toString()
-  }, [needAnac, page, deferredSearch, tipo, importo])
+  }, [needAnac, page, deferredSearch, tipo, importo, pubblicazione])
 
   const { data: anacData, isLoading: anacLoading } = useSWR<CigApiResponse>(
     needAnac ? `/api/cig?${anacQueryString}` : null,
@@ -625,9 +646,10 @@ export function GareListClient() {
     if (tipo    && tipo    !== "all") params.set("tipo",    tipo)
     if (importo && importo !== "all") params.set("importo", importo)
     if (scadenza && scadenza !== "all") params.set("scadenza", scadenza)
+    if (pubblicazione && pubblicazione !== "all") params.set("pubblicazione", pubblicazione)
     if (source  && source  !== "all") params.set("source",  source)
     return params.toString()
-  }, [page, deferredSearch, tipo, importo, scadenza, source, needTenders])
+  }, [page, deferredSearch, tipo, importo, scadenza, pubblicazione, source, needTenders])
 
   const { data, isLoading: swrLoading } = useSWR<TendersResponse>(
     needTenders ? `/api/tenders?${queryString}` : null,
@@ -674,12 +696,12 @@ export function GareListClient() {
   const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0
 
   const resetFilters = useCallback(() => {
-    setSearch(""); setTipo(""); setImporto(""); setScadenza(""); setSource("all"); setPage(0)
+    setSearch(""); setTipo(""); setImporto(""); setScadenza(""); setPubblicazione(""); setSource("all"); setPage(0)
   }, [])
 
   const handleFilterChange = useCallback(() => setPage(0), [])
 
-  const hasFilters = !!(search || tipo || importo || scadenza || source !== "all")
+  const hasFilters = !!(search || tipo || importo || scadenza || pubblicazione || source !== "all")
 
   const sourceStats = data?.sources?.filter(s => s.count > 0 || s.error)
 
@@ -772,6 +794,21 @@ export function GareListClient() {
             </SelectContent>
           </Select>
         )}
+
+        {/* Pubblicazione */}
+        <Select value={pubblicazione || "all"} onValueChange={v => { setPubblicazione(v === "all" ? "" : v); handleFilterChange() }}>
+          <SelectTrigger id="filter-pubblicazione" className="w-[165px] sm:w-[190px] text-xs sm:text-sm">
+            <Clock className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+            <SelectValue placeholder="Pubblicazione" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Pubblicazione</SelectItem>
+            <SelectItem value="48h">Ultime 48 ore</SelectItem>
+            <SelectItem value="7d">Ultimi 7 giorni</SelectItem>
+            <SelectItem value="30d">Ultimi 30 giorni</SelectItem>
+            <SelectItem value="90d">Ultimi 90 giorni</SelectItem>
+          </SelectContent>
+        </Select>
 
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground">
@@ -901,6 +938,7 @@ function getLotti(cig: CigLotto[] | string | null): CigLotto[] {
 function TenderCard({ tender }: { tender: TenderItem }) {
   const days     = daysUntil(tender.data_scadenza)
   const isActive = tender.stato === "active" || (days !== null && days > 0) || tender.sources === "anac"
+  const isNew    = isPublishedWithinHours(tender.data_pubblicazione, 48)
   const cigCode  = getCigCode(tender.cig)
   const lotti    = getLotti(tender.cig)
 
@@ -914,9 +952,20 @@ function TenderCard({ tender }: { tender: TenderItem }) {
   const cpvCodes = tender.descrizione_cpv ?? tender.tipo_contratto
 
   return (
-    <div className="border rounded-xl p-3 sm:p-5 bg-card hover:shadow-md transition-shadow space-y-2 sm:space-y-3">
+    <div
+      className={cn(
+        "border rounded-xl p-3 sm:p-5 bg-card hover:shadow-md transition-shadow space-y-2 sm:space-y-3",
+        isNew && "border-cyan-300 bg-cyan-50/40 shadow-sm dark:border-cyan-700/70 dark:bg-cyan-950/20",
+      )}
+    >
       {/* Header row */}
       <div className="flex flex-wrap items-center gap-2">
+        {isNew && (
+          <Badge className="gap-1 bg-cyan-500/15 text-cyan-700 border-cyan-200 font-medium text-xs px-2 py-0.5 dark:text-cyan-300 dark:border-cyan-800">
+            <Clock className="h-3 w-3" />
+            NUOVO 48H
+          </Badge>
+        )}
         {isActive && (
           <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-200 font-medium text-xs px-2 py-0.5">
             ● ATTIVA
@@ -987,7 +1036,9 @@ function TenderCard({ tender }: { tender: TenderItem }) {
         </div>
         <div>
           <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Pubblicato il</p>
-          <p className="font-medium text-sm">{formatDate(tender.data_pubblicazione) ?? "—"}</p>
+          <p className={cn("font-medium text-sm", isNew && "text-cyan-700 dark:text-cyan-300")}>
+            {formatDate(tender.data_pubblicazione) ?? "—"}
+          </p>
         </div>
       </div>
 
