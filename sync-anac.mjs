@@ -358,6 +358,13 @@ async function main() {
     // 6. Chiudi i bandi scaduti (in Supabase ma non più su ANAC)
     console.log("\n🧹 Pulizia bandi scaduti...");
 
+    // ⛑️ Safety check: se non abbiamo scaricato nulla, ANAC è probabilmente
+    // down. NON marcare tutto come "closed" altrimenti il sito resta vuoto.
+    if (allCigs.size === 0) {
+      console.log("  ⚠️  Nessun bando scaricato da ANAC — pulizia SALTATA per sicurezza.");
+      console.log("     (Se ANAC è down, marcare tutto come 'closed' cancellerebbe il sito)");
+    } else {
+
     // Supabase restituisce max 1000 righe — paginiamo per prenderli tutti
     let allActive = [];
     let from = 0;
@@ -399,7 +406,8 @@ async function main() {
       } else {
         console.log("  ✅ Nessun bando scaduto da chiudere");
       }
-    }
+      }
+    } // end else (allCigs.size > 0)
 
     // 7. Riepilogo
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
