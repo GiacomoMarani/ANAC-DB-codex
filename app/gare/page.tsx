@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export const metadata = {
   title: "Gare d'appalto pubbliche — Tender AI DB",
-  description: "Cerca e analizza bandi pubblici italiani da ANAC, TED Europa e CATO. Filtra per tipo, importo e scadenza. Analisi AI integrata.",
+  description: "Cerca e analizza bandi pubblici italiani da ANAC e TED Europa. Filtra per tipo, importo e scadenza. Analisi AI integrata.",
 }
 
 export default function GarePage() {
@@ -54,7 +54,7 @@ export default function GarePage() {
               Gare d&apos;appalto pubbliche
             </h1>
             <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-              Cerca tra migliaia di bandi da <strong>ANAC</strong>, <strong>TED Europa</strong> e <strong>CATO</strong>.
+              Cerca tra migliaia di bandi da <strong>ANAC</strong> e <strong>TED Europa</strong>.
               {" "}Filtra per tipo, importo e scadenza. Analizza con l&apos;AI.
             </p>
           </div>
@@ -94,8 +94,6 @@ export default function GarePage() {
               <a href="https://dati.anticorruzione.it" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">ANAC</a>
               {" · "}
               <a href="https://ted.europa.eu" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">TED Europa</a>
-              {" · "}
-              <a href="https://www.get-cato.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">CATO</a>
             </p>
           </div>
         </div>
