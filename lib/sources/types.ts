@@ -51,7 +51,7 @@ export const SOURCE_LABELS: Record<SourceKey, string> = {
   start_toscana: "Start Toscana",
   halleyweb:     "Halley Web",
   place_vda:     "Valle d'Aosta",
-  cato:          "CATO",
+  cato:          "ANAC",
 }
 
 /** Colori badge per ogni fonte (Tailwind-compatible) */
