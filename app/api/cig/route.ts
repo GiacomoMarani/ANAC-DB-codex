@@ -95,14 +95,22 @@ export async function GET(request: NextRequest) {
     .order("id", { ascending: false })
     .range(offset, offset + pageSize - 1)
 
-  // Apply filters — keyword search (AND logic: every word must match)
+  // Apply filters — keyword search
   if (q) {
-    const words = q.trim().split(/\s+/).filter(Boolean)
-    for (const word of words) {
-      const term = `%${word}%`
-      query = query.or(
-        `cig.ilike.${term},oggetto_gara.ilike.${term},descrizione_cpv.ilike.${term}`
-      )
+    const trimmed = q.trim()
+    // Detect CIG code (10 alphanumeric characters) → exact match for instant lookup
+    if (/^[A-Z0-9]{10}$/i.test(trimmed)) {
+      query = query.ilike("cig", `%${trimmed.toUpperCase()}%`)
+    } else {
+      // AND logic: every word must match at least one field
+      // Now also searches denominazione_amministrazione_appaltante (stazione appaltante)
+      const words = trimmed.split(/\s+/).filter(Boolean)
+      for (const word of words) {
+        const term = `%${word}%`
+        query = query.or(
+          `cig.ilike.${term},oggetto_gara.ilike.${term},descrizione_cpv.ilike.${term},denominazione_amministrazione_appaltante.ilike.${term}`
+        )
+      }
     }
   }
 

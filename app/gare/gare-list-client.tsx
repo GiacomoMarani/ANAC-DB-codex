@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useCallback, useDeferredValue, useMemo } from "react"
+import { useState, useCallback, useMemo, useRef, useEffect, createContext, useContext } from "react"
 import useSWR from "swr"
 import {
   Search, SlidersHorizontal, ChevronLeft, ChevronRight,
   ExternalLink, Clock, Euro, Building2, MapPin, FileText, Loader2,
   Globe, ShieldCheck, Database, Sparkles, Key, X, ChevronDown, ChevronUp,
-  Copy, Download, Check,
+  Copy, Download, Check, History,
 } from "lucide-react"
 import { Button }  from "@/components/ui/button"
 import { Input }   from "@/components/ui/input"
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 import type { SourceKey } from "@/lib/sources/types"
 import { SOURCE_LABELS, SOURCE_COLORS, buildAnacCigUrl } from "@/lib/sources/types"
 import type { NormalizedTender } from "@/lib/sources/types"
+import { useDebounce } from "@/hooks/use-debounce"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,10 @@ const ALL_SOURCES: { value: SourceKey | "all"; label: string; flag?: string }[] 
   { value: "place_vda",    label: "Valle d'Aosta",          flag: "📡" },
 ]
 
+// ─── Search Context (per highlight nei risultati) ─────────────────────────────
+
+const SearchQueryContext = createContext<string>("")
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
@@ -74,6 +79,50 @@ function formatCurrency(v: number | null) {
 function formatDate(d: string | null) {
   if (!d) return null
   try { return new Date(d).toLocaleDateString("it-IT") } catch { return d }
+}
+
+// ─── Highlight Helper ────────────────────────────────────────────────────────
+
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query || !text) return <>{text}</>
+  const words = query.trim().split(/\s+/).filter(w => w.length >= 2)
+  if (words.length === 0) return <>{text}</>
+  const regex = new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi")
+  const parts = text.split(regex)
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part)
+          ? <mark key={i} className="bg-amber-200/70 dark:bg-amber-500/30 text-inherit rounded-sm px-0.5">{part}</mark>
+          : part
+      )}
+    </>
+  )
+}
+
+// ─── Recent Searches ─────────────────────────────────────────────────────────
+
+const RECENT_SEARCHES_KEY = "anac_recent_searches"
+const MAX_RECENT_SEARCHES = 8
+
+function getRecentSearches(): string[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = localStorage.getItem(RECENT_SEARCHES_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function addRecentSearch(query: string) {
+  if (!query.trim() || typeof window === "undefined") return
+  const searches = getRecentSearches().filter(s => s.toLowerCase() !== query.trim().toLowerCase())
+  searches.unshift(query.trim())
+  localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(searches.slice(0, MAX_RECENT_SEARCHES)))
+}
+
+function clearRecentSearches() {
+  if (typeof window === "undefined") return
+  localStorage.removeItem(RECENT_SEARCHES_KEY)
 }
 
 function daysUntil(d: string | null): number | null {
@@ -578,8 +627,35 @@ export function GareListClient() {
   const [source,   setSource]   = useState<SourceKey | "all">("all")
   const [page,     setPage]     = useState(0)
   const [showAiModal, setShowAiModal] = useState(false)
+  const [showRecent, setShowRecent] = useState(false)
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const searchRef = useRef<HTMLDivElement>(null)
 
-  const deferredSearch = useDeferredValue(search)
+  const deferredSearch = useDebounce(search, 300)
+
+  // Load recent searches on mount
+  useEffect(() => {
+    setRecentSearches(getRecentSearches())
+  }, [])
+
+  // Save search when debounced value changes (user finished typing)
+  useEffect(() => {
+    if (deferredSearch.trim().length >= 3) {
+      addRecentSearch(deferredSearch)
+      setRecentSearches(getRecentSearches())
+    }
+  }, [deferredSearch])
+
+  // Close recent searches dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowRecent(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
 
   const isAnacMode = source === "anac"
   const isAllMode  = source === "all"
@@ -710,19 +786,46 @@ export function GareListClient() {
 
       {/* ── Search Bar ── */}
       <div className="flex gap-2">
-        <div className="relative flex-1">
+        <div className="relative flex-1" ref={searchRef}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             id="gare-search"
             placeholder={
               isAnacMode
-                ? "Cerca nei bandi ANAC in corso (oggetto gara)…"
-                : "Cerca per oggetto della gara…"
+                ? "Cerca per oggetto, CIG, stazione appaltante…"
+                : "Cerca per oggetto, CIG, stazione appaltante…"
             }
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(0) }}
+            onFocus={() => setShowRecent(true)}
             className="pl-10 h-11 text-sm sm:text-base"
           />
+          {/* Recent Searches Dropdown */}
+          {showRecent && !search && recentSearches.length > 0 && (
+            <div className="absolute top-full left-0 right-0 z-40 mt-1 bg-card border rounded-lg shadow-lg overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
+                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <History className="h-3 w-3" /> Ricerche recenti
+                </span>
+                <button
+                  onClick={() => { clearRecentSearches(); setRecentSearches([]); setShowRecent(false) }}
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  Cancella
+                </button>
+              </div>
+              {recentSearches.map((q, i) => (
+                <button
+                  key={i}
+                  onClick={() => { setSearch(q); setShowRecent(false); setPage(0) }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center gap-2"
+                >
+                  <Search className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <span className="truncate">{q}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <Button size="lg" className="px-4 sm:px-6" onClick={() => setPage(0)}>
           Cerca
@@ -879,11 +982,13 @@ export function GareListClient() {
         </div>
       )}
 
+      <SearchQueryContext.Provider value={deferredSearch}>
       <div className="space-y-4">
         {items.map(tender => (
           <TenderCard key={tender.id} tender={tender} />
         ))}
       </div>
+      </SearchQueryContext.Provider>
 
       {/* ── Pagination ── */}
       {totalPages > 1 && (
@@ -989,7 +1094,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
       {/* Title */}
       <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="block group">
         <h2 className="text-base font-semibold leading-snug group-hover:text-primary transition-colors">
-          {tender.oggetto || "—"}
+          <HighlightText text={tender.oggetto || "—"} query={useContext(SearchQueryContext)} />
         </h2>
       </a>
 
