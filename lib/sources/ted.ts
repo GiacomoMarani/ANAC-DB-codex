@@ -5,12 +5,14 @@
  * Campi validi: https://api.ted.europa.eu/swagger-ui/index.html
  * Auth: X-API-Key header
  *
- * Note dall'esplorazione API:
+ * Note dall'esplorazione API (vedi anche https://docs.ted.europa.eu/apis/3.0/search.html
+ * e lo spec OpenAPI https://api.ted.europa.eu/api-v3.yaml):
  * - Risposta: { notices: [...], totalNoticeCount: N }
  * - Ogni notice: publication-number, buyer-name (multilingua), links, title-lot, total-value, ...
  * - Query "buyer-country=ITA" per filtrare Italia (ISO 3166-1 alpha-3)
- * - Pagination: page (1-based), limit
- * - Sort: [{ field, order }] — order: DESC/ASC
+ * - Pagination: page (1-based), limit (max 250/pagina, max 15.000 risultati raggiungibili)
+ * - Sort: non è un parametro JSON separato, si esprime dentro "query" con
+ *   "SORT BY <field> ASC|DESC" (Expert Query Language)
  */
 
 import type { NormalizedTender, SourceResult } from "./types"
@@ -113,12 +115,20 @@ function mapTedNotice(n: any): NormalizedTender {
   // Date
   // publication-date = data di pubblicazione sul TES
   // dispatch-date = data di invio al giornale
-  // deadline-date-lot = scadenza offerte (eForms), deadline = scadenza legacy
+  // deadline-receipt-tender-date-lot = scadenza presentazione offerte (campo eForms standard, BT-131),
+  // deadline-date-lot/deadline = equivalenti legacy (schema pre-eForms), usati come fallback
   // Questi campi possono arrivare come array: ["2025-06-23+02:00"] → estrarre e pulire
   const dataPub = unwrapTedValue(n["publication-date"] ?? n["dispatch-date"])
-  const dataScadRaw = unwrapTedValue(n["deadline-date-lot"] ?? n["deadline"])
+  const dataScadRaw = unwrapTedValue(
+    n["deadline-receipt-tender-date-lot"] ?? n["deadline-date-lot"] ?? n["deadline"]
+  )
   // Rimuovi timezone offset (+02:00) per uniformità ISO
   const dataScadenza = dataScadRaw?.replace(/\+\d{2}:\d{2}$/, "") ?? null
+
+  // Luogo di esecuzione (città) — presente per lotto o, in mancanza, a livello di procedura
+  const provincia = unwrapTedValue(
+    n["place-of-performance-city-lot"] ?? n["place-of-performance-city-proc"]
+  )
 
   return {
     id:                  `ted:${pubNum}`,
@@ -126,7 +136,7 @@ function mapTedNotice(n: any): NormalizedTender {
     oggetto:             titleText,
     importo,
     stato:               "active",
-    provincia:           null,
+    provincia,
     data_pubblicazione:  typeof dataPub === "string" ? dataPub.replace(/\+\d{2}:\d{2}$/, "") : dataPub,
     data_scadenza:       dataScadenza,
     tipo_contratto:      mapTedContractNature(n["contract-nature-main-lot"]),
@@ -236,11 +246,14 @@ export async function fetchTED(
   ].join(" AND ")
 
   const defaultQuery = "buyer-country=ITA"
+  // SORT BY va in coda alla query (Expert Query Language), non è un parametro JSON separato:
+  // così i risultati arrivano dal più recente al più vecchio invece che in ordine arbitrario.
+  const query = `${expertQuery || defaultQuery} SORT BY publication-date DESC`
   const body = {
-    query:  expertQuery || defaultQuery,
+    query,
     // scope "ACTIVE" = solo bandi con deadline non ancora scaduta
     scope:  "ACTIVE",
-    // Solo campi validi per TED API v3 (sort non è supportato)
+    // Solo campi validi per TED API v3 (il sort è nella query, vedi sopra)
     fields: [
       "publication-number",
       "title-lot",
@@ -251,12 +264,15 @@ export async function fetchTED(
       "buyer-name",
       "publication-date",
       "dispatch-date",
+      "deadline-receipt-tender-date-lot",
       "deadline-date-lot",
       "deadline",
       "contract-nature-main-lot",
       "links",
       "main-classification-proc",
       "notice-type",
+      "place-of-performance-city-lot",
+      "place-of-performance-city-proc",
     ],
     page:  page + 1,
     limit: pageSize,
