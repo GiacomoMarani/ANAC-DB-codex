@@ -7,19 +7,21 @@
  *   tipo     — goods | services | works
  *   importo  — fascia (< €40.000 | €40k – €150k | €150k – €1M | €1M – €5M | > €5M)
  *   scadenza — giorni alla scadenza (7 | 30 | 90)
- *   source   — fonte specifica: ted | sintel | mepa | start_toscana |
- *              halleyweb | place_vda | anac | cato
+ *   source   — fonte specifica: ted | anac | cato | sintel | mepa | start_toscana |
+ *              halleyweb | place_vda | intercenter | sardegna | tuttogare |
+ *              lazio_stella | estar | bolzano | digitalpa | abruzzo | net4market |
+ *              acquedotto_fiora | empulia | soresa | efvg
  *              (può essere ripetuto più volte per multi-fonte)
  *
  * Fan-out per fonte:
  *   ted            → adapter TED Europa diretto (X-API-Key)
  *   anac           → adapter ANAC diretto (BDNCP Superset / Dremio)
- *   sintel         → Cato filtrato per sintel
- *   mepa           → Cato filtrato per acquistinretepa
- *   start_toscana  → Cato filtrato per start_toscana
- *   halleyweb      → Cato filtrato per halleyweb
- *   place_vda      → Cato filtrato per place_vda
- *   cato / (vuoto) → Cato generico (tutte le fonti)
+ *   cato / (vuoto) → Cato generico (tutte le sotto-fonti)
+ *   altre chiavi   → Cato, filtrato client-side sul campo 'sources' (l'API Cato non
+ *                    supporta un filtro server-side per fonte — vedi lib/sources/cato.ts).
+ *                    NOTA: Cato aggrega anche 'ted' e 'pvl_anac' (= ANAC) al suo interno,
+ *                    ma quelle due chiavi non sono esposte qui perché già coperte dagli
+ *                    adapter diretti sopra (evita fonti duplicate/ridondanti in UI).
  */
 import { NextRequest, NextResponse } from "next/server"
 import { fetchTED }  from "@/lib/sources/ted"
@@ -27,14 +29,28 @@ import { fetchCato } from "@/lib/sources/cato"
 import { fetchANAC } from "@/lib/sources/anac"
 import type { SourceKey, SourceResult } from "@/lib/sources/types"
 
-// Mappa fonte → chiave Cato (parametro source nativo di Cato)
+// Mappa fonte → valore raw del campo 'sources' di Cato (usato per il filtro client-side
+// in fetchCato, l'API Cato non supporta un filtro server-side — vedi lib/sources/cato.ts)
 const CATO_SOURCE_MAP: Partial<Record<SourceKey, string>> = {
-  sintel:        "sintel",
-  mepa:          "acquistinretepa",
-  start_toscana: "start_toscana",
-  halleyweb:     "halleyweb",
-  place_vda:     "place_vda",
-  cato:          "",  // vuoto = tutte le fonti Cato
+  sintel:           "sintel",
+  mepa:             "acquistinretepa",
+  start_toscana:    "start_toscana",
+  halleyweb:        "halleyweb",
+  place_vda:        "place_vda",
+  intercenter:      "intercenter",
+  sardegna:         "sardegna",
+  tuttogare:        "tuttogare",
+  lazio_stella:     "lazio_stella",
+  estar:            "estar",
+  bolzano:          "bolzano",
+  digitalpa:        "digitalpa",
+  abruzzo:          "abruzzo",
+  net4market:       "net4market",
+  acquedotto_fiora: "acquedotto_fiora",
+  empulia:          "empulia",
+  soresa:           "soresa",
+  efvg:             "efvg",
+  cato:             "",  // vuoto = tutte le sotto-fonti Cato, nessun filtro
   // anac: usa fetchANAC diretto
 }
 

@@ -2,9 +2,16 @@
  * lib/sources/cato.ts
  * Adapter Cato (www.get-cato.com/api/tenders)
  *
- * Supporta il parametro `source` nativo di Cato per isolare
- * fonti specifiche: sintel, acquistinretepa, start_toscana,
- * halleyweb, place_vda, ted (fallback), ecc.
+ * NOTA: l'API Cato non supporta un filtro "fonte" lato server — un parametro
+ * `source` (in qualunque valore, anche inventato) viene ignorato silenziosamente
+ * e restituisce sempre lo stesso set di risultati (verificato via devtools su
+ * get-cato.com/gare, che infatti non espone alcun filtro "Fonte" in UI).
+ * Il filtro per fonte qui sotto è quindi applicato client-side dopo il fetch
+ * (vedi fetchCato) — ogni pagina Cato restituisce comunque sempre 10 item grezzi
+ * (nessun parametro di page-size ha effetto), quindi con il filtro attivo
+ * alcune pagine possono risultare vuote/parziali.
+ * Parametri nativi verificati: q (full-text), tp (tipo_procedura, match esatto),
+ * min/max (importo), days (scadenza in giorni), p (pagina).
  */
 
 import type { NormalizedTender, SourceKey, SourceResult } from "./types"
@@ -41,7 +48,8 @@ export interface CatoFetchParams {
   scadenza?: string
   pubblicazione?: string
   tipo?:     string
-  /** Fonte specifica da passare a Cato (es. "sintel", "start_toscana") */
+  /** Fonte specifica (valore raw del campo 'sources' Cato, es. "sintel"): filtrato
+   *  client-side, l'API Cato non lo supporta lato server (vedi header file) */
   source?:   string
 }
 
@@ -61,6 +69,16 @@ function getPublicationCutoff(value: string): Date | null {
   }
 
   return cutoff
+}
+
+/** Converte "DD/MM/YYYY" / "DD/MM/YYYY HH:mm" (italiano) o ISO in "YYYY-MM-DD" */
+function parseCatoDate(raw: unknown): string | null {
+  if (!raw) return null
+  const dmyMatch = String(raw).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (dmyMatch) {
+    return `${dmyMatch[3]}-${dmyMatch[2].padStart(2,'0')}-${dmyMatch[1].padStart(2,'0')}`
+  }
+  return String(raw).split('T')[0] // già ISO
 }
 
 function isPublishedSince(value: string | null, cutoff: Date, now = new Date()): boolean {
@@ -93,16 +111,13 @@ function mapCatoItem(item: any, defaultSource: SourceKey): NormalizedTender {
     info.scadenza ??
     item.data_scadenza_offerta ??
     null
-  // Normalizza formato italiano "DD/MM/YYYY HH:mm" → ISO
-  let data_scadenza: string | null = null
-  if (scadenzaRaw) {
-    const dmyMatch = String(scadenzaRaw).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
-    if (dmyMatch) {
-      data_scadenza = `${dmyMatch[3]}-${dmyMatch[2].padStart(2,'0')}-${dmyMatch[1].padStart(2,'0')}`
-    } else {
-      data_scadenza = String(scadenzaRaw).split('T')[0] // già ISO
-    }
-  }
+  const data_scadenza = parseCatoDate(scadenzaRaw)
+
+  // Data pubblicazione: info.date.pubblicazione è la data REALE del bando (può essere anche
+  // molto nel passato). item.created_at è invece la data di ingestion nel DB di Cato — usarla
+  // come pubblicazione farebbe apparire "nuovi" bandi vecchi di mesi/anni. Fallback su created_at
+  // solo quando la data reale non è disponibile.
+  const data_pubblicazione = parseCatoDate(info.date?.pubblicazione) ?? item.created_at ?? null
 
   // Link: Cato usa 'link_web' come URL diretto alla fonte
   const link = item.link_web ?? item.original_url ?? item.link_originale ?? null
@@ -116,17 +131,32 @@ function mapCatoItem(item: any, defaultSource: SourceKey): NormalizedTender {
     info.dati_stazione_appaltante?.nome ??
     item.stazione_appaltante ?? null
 
-  // Provincia/regione
-  const provincia = info.ubicazione?.provincia ?? info.ubicazione?.regione ?? item.luogo ?? null
+  // Luogo: preferisci la coppia "Comune, Regione" (più informativa), poi il campo
+  // 'luogo' già composto da Cato, infine la sola provincia come ultima risorsa
+  const { comune, regione, provincia: provinciaSola } = info.ubicazione ?? {}
+  const provincia =
+    (comune && regione ? `${comune}, ${regione}` : (comune || regione)) ??
+    item.luogo ??
+    provinciaSola ??
+    null
+
+  // CIG: info.cig[].cig è spesso solo un indice di lotto placeholder ("1", "2", …), non un
+  // vero CIG (10 caratteri alfanumerici) — succede per bandi con origine TED o pvl_anac dentro
+  // Cato. In quel caso numero_gara è più affidabile: per i bandi di origine TED coincide
+  // esattamente col publication-number che usa anche il nostro adapter TED nativo (fixa sia il
+  // "CIG" fittizio in UI sia la mancata de-duplicazione tra Cato e TED in route.ts).
+  const isRealCig = (s: unknown): s is string => typeof s === "string" && /^[A-Za-z0-9]{10}$/.test(s)
+  const lotCig = info.cig?.[0]?.cig
+  const cig = isRealCig(lotCig) ? lotCig : (item.numero_gara ?? item.cig ?? String(item.id))
 
   return {
     id:                  `${src}:${item.id}`,
-    cig:                 info.cig?.[0]?.cig ?? item.cig ?? String(item.id),
+    cig,
     oggetto,
     importo,
     stato:               item.status ?? item.stato ?? "active",
     provincia,
-    data_pubblicazione:  item.created_at ?? item.data_pubblicazione ?? null,
+    data_pubblicazione,
     data_scadenza,
     tipo_contratto:      info.procedura?.tipo_procedura ?? item.tipo_procedura ?? item.tipo_contratto ?? null,
     descrizione_cpv:     (info.procedura?.codice_cpv as Array<{codice:string;etichetta:string}> | undefined)
@@ -148,11 +178,12 @@ export async function fetchCato(
   const p = new URLSearchParams()
   p.set("p", String(page))
 
-  // CATO non supporta un parametro "tipo" separato.
-  // Combina q + la keyword del tipo come ricerca full-text.
-  const tipoKeyword = tipo ? (TIPO_TO_CATO[tipo.toLowerCase()] ?? tipo) : null
-  const qFull = [q?.trim(), tipoKeyword].filter(Boolean).join(" ") || undefined
-  if (qFull) p.set("q", qFull)
+  if (q?.trim()) p.set("q", q.trim())
+
+  // Tipo procedura: parametro nativo "tp" (match esatto su tipo_procedura, verificato via devtools
+  // sul sito get-cato.com/gare — es. tp=Servizi, tp=Forniture, tp=Lavori+pubblici)
+  const tipoNativo = tipo ? (TIPO_TO_CATO[tipo.toLowerCase()] ?? tipo) : null
+  if (tipoNativo) p.set("tp", tipoNativo)
 
   // Importo: usa min/max numerici in euro
   if (importo) {
@@ -163,11 +194,9 @@ export async function fetchCato(
     }
   }
 
-  // Scadenza: giorni numerici (CATO li accetta direttamente: 7, 30, 90)
-  if (scadenza) p.set("scadenza", scadenza)
-
-  // Filtro fonte nativo Cato
-  if (source) p.set("source", source)
+  // Scadenza: parametro nativo "days" (verificato via devtools — "scadenza" non è supportato
+  // ed è ignorato silenziosamente dall'API)
+  if (scadenza) p.set("days", scadenza)
 
   const url = `${CATO_BASE}?${p.toString()}`
 
@@ -197,6 +226,15 @@ export async function fetchCato(
     mapCatoItem(i, defaultSource),
   )
 
+  // Filtro per sotto-fonte: applicato client-side sul campo 'sources' della risposta perché
+  // l'API Cato non supporta un filtro server-side per fonte (vedi header file). Ogni pagina
+  // Cato restituisce sempre 10 item grezzi (verificato: nessun parametro di page-size ha
+  // effetto), quindi con un filtro attivo alcune pagine possono risultare vuote o parziali
+  // anche se altrove ci sono altri risultati corrispondenti.
+  if (source) {
+    items = items.filter((item: NormalizedTender) => item.sources === source)
+  }
+
   const publicationCutoff = pubblicazione ? getPublicationCutoff(pubblicazione) : null
   if (publicationCutoff) {
     items = items.filter((item: NormalizedTender) => isPublishedSince(item.data_pubblicazione, publicationCutoff))
@@ -204,7 +242,7 @@ export async function fetchCato(
 
   return {
     items,
-    total:  publicationCutoff ? items.length : raw.total ?? items.length,
+    total:  (source || publicationCutoff) ? items.length : raw.total ?? items.length,
     source: defaultSource,
   }
 }

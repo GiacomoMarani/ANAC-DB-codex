@@ -61,6 +61,20 @@ const ALL_SOURCES: { value: SourceKey | "all"; label: string; flag?: string }[] 
   { value: "start_toscana", label: "Start Toscana",         flag: "📡" },
   { value: "halleyweb",    label: "Halley Web",             flag: "📡" },
   { value: "place_vda",    label: "Valle d'Aosta",          flag: "📡" },
+  // Sotto-fonti CATO scoperte via analisi diretta dell'API (devtools su get-cato.com/gare)
+  { value: "intercenter",      label: "Intercenter",              flag: "📡" },
+  { value: "sardegna",         label: "Sardegna CAT",              flag: "📡" },
+  { value: "tuttogare",        label: "TuttoGare",                 flag: "📡" },
+  { value: "lazio_stella",     label: "Lazio (S.TEL.LA.)",          flag: "📡" },
+  { value: "estar",            label: "ESTAR Toscana",              flag: "📡" },
+  { value: "bolzano",          label: "Alto Adige",                 flag: "📡" },
+  { value: "digitalpa",        label: "DigitalPA",                  flag: "📡" },
+  { value: "abruzzo",          label: "Abruzzo",                    flag: "📡" },
+  { value: "net4market",       label: "Net4Market",                 flag: "📡" },
+  { value: "acquedotto_fiora", label: "Acquedotto del Fiora",       flag: "📡" },
+  { value: "empulia",          label: "EmPulia",                    flag: "📡" },
+  { value: "soresa",           label: "SoReSa Campania",            flag: "📡" },
+  { value: "efvg",             label: "Friuli Venezia Giulia",      flag: "📡" },
 ]
 
 // ─── Search Context (per highlight nei risultati) ─────────────────────────────
