@@ -295,8 +295,11 @@ export async function fetchTED(
   // (sono probabilmente scaduti ma TED li segna ancora come "ACTIVE")
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - 60)
+  const today = new Date().toISOString().slice(0, 10)
   const filtered = mapped.filter((item: NormalizedTender) => {
-    if (item.data_scadenza) return true  // ha scadenza → tienilo
+    // deadline-date-lot è spesso un valore stale legato a un lotto già chiuso:
+    // se c'è una scadenza, tienila solo se non è già passata
+    if (item.data_scadenza) return item.data_scadenza >= today
     if (!item.data_pubblicazione) return false  // nessuna data → scarta
     return new Date(item.data_pubblicazione) >= cutoff
   })
