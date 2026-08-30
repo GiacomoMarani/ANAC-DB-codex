@@ -34,9 +34,14 @@ export default function GarePage() {
               </span>
             </div>
           </Link>
-          <a href="https://tender-ai-pro.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-xs sm:text-sm font-medium text-primary hover:underline whitespace-nowrap">
-            Analisi avanzata →
-          </a>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <Link href="/codici-cpv" className="text-xs sm:text-sm font-medium text-primary hover:underline whitespace-nowrap">
+              Cerca codice CPV
+            </Link>
+            <a href="https://tender-ai-pro.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-xs sm:text-sm font-medium text-primary hover:underline whitespace-nowrap">
+              Analisi avanzata →
+            </a>
+          </div>
         </div>
       </header>
 

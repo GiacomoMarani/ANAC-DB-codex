@@ -1,0 +1,1 @@
+{"model":"Xenova/multilingual-e5-small","dims":384,"count":9454,"scale":127,"dtype":"int8","queryPrefix":"query: ","docPrefix":"passage: "}
