@@ -107,7 +107,7 @@ function HighlightText({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((part, i) =>
         regex.test(part)
-          ? <mark key={i} className="bg-amber-200/70 dark:bg-amber-500/30 text-inherit rounded-sm px-0.5">{part}</mark>
+          ? <mark key={i} className="bg-yellow-100/80 dark:bg-yellow-400/20 text-inherit rounded-sm px-0.5">{part}</mark>
           : part
       )}
     </>
@@ -773,8 +773,13 @@ export function GareListClient() {
       if (!item.data_scadenza) return true
       return item.data_scadenza >= today
     })
-    // Ordina: scadenza più vicina prima, senza scadenza in coda
+    // Ordina: ultime 48h sempre in cima, poi scadenza più vicina prima
     active.sort((a, b) => {
+      const aNew = isPublishedWithinHours(a.data_pubblicazione, 48)
+      const bNew = isPublishedWithinHours(b.data_pubblicazione, 48)
+      // Le gare nuove (48h) vanno sempre in cima
+      if (aNew !== bNew) return aNew ? -1 : 1
+      // Dentro ogni gruppo: scadenza più vicina prima
       const aHas = !!a.data_scadenza
       const bHas = !!b.data_scadenza
       if (aHas && bHas) return a.data_scadenza!.localeCompare(b.data_scadenza!)
@@ -1103,13 +1108,13 @@ function TenderCard({ tender }: { tender: TenderItem }) {
     <div
       className={cn(
         "border rounded-xl p-3 sm:p-5 bg-card hover:shadow-md transition-shadow space-y-2 sm:space-y-3",
-        isNew && "border-cyan-300 bg-cyan-50/40 shadow-sm dark:border-cyan-700/70 dark:bg-cyan-950/20",
+        isNew && "border-primary/40 bg-primary/[0.03] ring-1 ring-primary/10 shadow-sm dark:border-primary/30 dark:bg-primary/[0.04]",
       )}
     >
       {/* Header row */}
       <div className="flex flex-wrap items-center gap-2">
         {isNew && (
-          <Badge className="gap-1 bg-cyan-500/15 text-cyan-700 border-cyan-200 font-medium text-xs px-2 py-0.5 dark:text-cyan-300 dark:border-cyan-800">
+          <Badge className="gap-1 bg-primary/10 text-primary border-primary/20 font-semibold text-xs px-2 py-0.5 dark:text-primary dark:border-primary/30">
             <Clock className="h-3 w-3" />
             NUOVO 48H
           </Badge>
@@ -1184,7 +1189,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
         </div>
         <div>
           <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Pubblicato il</p>
-          <p className={cn("font-medium text-sm", isNew && "text-cyan-700 dark:text-cyan-300")}>
+          <p className={cn("font-medium text-sm", isNew && "text-primary dark:text-primary")}>
             {formatDate(tender.data_pubblicazione) ?? "—"}
           </p>
         </div>
