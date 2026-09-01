@@ -134,6 +134,7 @@ export async function GET(request: NextRequest) {
   const importo  = sp.get("importo") ?? undefined
   const scadenza = sp.get("scadenza") ?? undefined
   const pubblicazione = sp.get("pubblicazione") ?? undefined
+  const cpv      = sp.get("cpv") ?? undefined
 
   // Multi-valore: ?source=ted&source=cato
   const rawSources = sp.getAll("source")
@@ -174,6 +175,16 @@ export async function GET(request: NextRequest) {
   const publicationCutoff = pubblicazione ? getPublicationCutoff(pubblicazione) : null
   if (publicationCutoff) {
     allItems = allItems.filter(item => isPublishedSince(item.data_pubblicazione, publicationCutoff))
+    totalItems = allItems.length
+  }
+
+  // Filtro CPV — solo per codice, prefix-match (Cato/TED non supportano filtro server-side)
+  if (cpv) {
+    const cpvDigits = cpv.replace(/[^0-9]/g, "")
+    allItems = allItems.filter(item => {
+      const code = (item.descrizione_cpv ?? "").replace(/[^0-9]/g, "")
+      return code.startsWith(cpvDigits)
+    })
     totalItems = allItems.length
   }
 

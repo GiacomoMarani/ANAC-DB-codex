@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (cpv) {
-    query = query.ilike("descrizione_cpv", `%${cpv}%`)
+    query = query.ilike("descrizione_cpv", `${cpv}%`)
   }
 
   if (non_scadute === "true") {

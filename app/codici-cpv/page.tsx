@@ -22,6 +22,7 @@
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { SiteNav } from "@/components/site-nav"
 import {
   Search, ChevronRight, ChevronDown, Loader2, Copy, Check, Sparkles,
   X, ChevronLeft, LayoutGrid, ListTree,
@@ -343,54 +344,71 @@ export default function CodiciCpvPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* ── Navbar ── */}
-      <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between">
-          <Link href="/gare" className="flex items-center gap-2.5 sm:gap-3 group">
-            <div className="relative h-10 w-10 sm:h-11 sm:w-11 rounded-xl overflow-hidden shadow-sm ring-1 ring-black/5">
-              <Image src="/logo.jpg" alt="Tender AI DB" fill className="object-cover" priority />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-base sm:text-lg font-bold tracking-tight leading-none group-hover:text-primary transition-colors">
-                Tender AI DB
-              </span>
-              <span className="text-[11px] sm:text-xs text-blue-500 font-medium uppercase tracking-wider leading-tight">
-                Motore di ricerca gare
-              </span>
-            </div>
-          </Link>
-          <Link href="/gare" className="text-xs sm:text-sm font-medium text-primary hover:underline whitespace-nowrap">
-            ← Torna alle gare
-          </Link>
-        </div>
-      </header>
+    <div className="min-h-[100dvh] bg-background flex flex-col">
+      {/* ── Shared nav (cpv variant shows back-to-gare link) ── */}
+      <SiteNav variant="cpv" />
 
       {/* ── Hero ── */}
-      <section className="border-b bg-gradient-to-b from-card to-background">
-        <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-10 md:py-14">
-          <div className="max-w-2xl">
-            <h1 className="text-xl sm:text-3xl md:text-4xl font-bold tracking-tight mb-2 sm:mb-3">
-              Elenco codici CPV
+      <section className="relative border-b border-border overflow-hidden">
+        {/* Subtle blue bloom */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 55% 45% at 0% 0%, oklch(0.52 0.22 255 / 0.10) 0%, transparent 70%)",
+          }}
+        />
+
+        <div className="container mx-auto px-4 sm:px-6 py-10 sm:py-14 md:py-20">
+          <div className="max-w-3xl space-y-5">
+            {/* Headline */}
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold tracking-tight leading-[1.05] text-foreground">
+              Codici CPV
             </h1>
-            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-              Cerca ed esplora il Vocabolario comune per gli appalti pubblici (CPV): trova i codici
-              di riferimento della tua azienda per monitorare le gare giuste.
+
+            {/* Subtext — max 20 words */}
+            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-[52ch]">
+              Il Vocabolario comune per gli appalti pubblici.{" "}
+              Ricerca full-text istantanea su 9.454 codici ufficiali CE.
             </p>
+
+            {/* Stat chips */}
+            <div className="flex flex-wrap gap-2 pt-1">
+              {[
+                { value: "9.454", label: "codici totali" },
+                { value: "5", label: "livelli gerarchici" },
+                { value: "CE 2008", label: "Reg. 213/2008" },
+              ].map((chip) => (
+                <span
+                  key={chip.value}
+                  className="
+                    inline-flex items-center gap-1.5
+                    px-3 py-1.5 rounded-md
+                    border border-border bg-card/60
+                    text-xs font-medium
+                  "
+                >
+                  <span className="text-foreground font-bold tabular-nums">{chip.value}</span>
+                  <span className="text-muted-foreground">{chip.label}</span>
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {!data ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-      <div className="border rounded-none sm:rounded-xl sm:mx-4 md:mx-auto md:max-w-6xl sm:mt-6 overflow-hidden">
-        {/* ── Toolbar ── */}
-        <div className="bg-foreground text-background px-4 sm:px-5 py-3 flex items-center justify-between">
-          <span className="text-sm font-semibold">Esplora i codici CPV</span>
-        </div>
+      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1">
+        {!data ? (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+        <div className="border rounded-xl overflow-hidden">
+          {/* ── Toolbar ── */}
+          <div className="bg-foreground text-background px-4 sm:px-5 py-3 flex items-center justify-between">
+            <span className="text-sm font-semibold">Esplora i codici CPV</span>
+          </div>
 
         <div className="flex flex-col md:flex-row">
           {/* ── Sidebar filtri ── */}
@@ -464,30 +482,6 @@ export default function CodiciCpvPage() {
               </div>
             </div>
 
-            <div>
-              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                Tipo di codice
-              </h4>
-              <div className="flex gap-1.5">
-                {([
-                  ["all", "Tutti", null],
-                  ["leaf", "Foglie", leafBranchCounts.leaf],
-                  ["branch", "Rami", leafBranchCounts.branch],
-                ] as const).map(([value, label, count]) => (
-                  <button
-                    key={value}
-                    onClick={() => setLeafFilter(value)}
-                    className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
-                      leafFilter === value
-                        ? "bg-foreground text-background border-foreground"
-                        : "hover:bg-muted"
-                    }`}
-                  >
-                    {label}{count !== null && ` (${count.toLocaleString("it-IT")})`}
-                  </button>
-                ))}
-              </div>
-            </div>
           </aside>
 
           {/* ── Contenuto principale ── */}
@@ -495,34 +489,37 @@ export default function CodiciCpvPage() {
             <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
               <div>
                 <p className="text-sm font-semibold">
-                  {isExploreState ? "Esplora il vocabolario CPV" : "Risultati della ricerca"}
+                  {viewMode === "albero"
+                    ? "Alberatura CPV"
+                    : isExploreState
+                    ? "Esplora il vocabolario CPV"
+                    : "Risultati della ricerca"}
                 </p>
               </div>
-              {!isExploreState && (
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Visualizza</span>
-                  <div className="flex rounded-lg border p-0.5">
-                    <button
-                      onClick={() => setViewMode("schede")}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-colors ${viewMode === "schede" ? "bg-foreground text-background" : "hover:bg-muted"}`}
-                    >
-                      <LayoutGrid className="h-3.5 w-3.5" /> Schede
-                    </button>
-                    <button
-                      onClick={() => setViewMode("albero")}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-colors ${viewMode === "albero" ? "bg-foreground text-background" : "hover:bg-muted"}`}
-                    >
-                      <ListTree className="h-3.5 w-3.5" /> Alberatura
-                    </button>
-                  </div>
+              {/* Toggle sempre visibile */}
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Visualizza</span>
+                <div className="flex rounded-lg border p-0.5">
+                  <button
+                    onClick={() => setViewMode("schede")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-colors ${viewMode === "schede" ? "bg-foreground text-background" : "hover:bg-muted"}`}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" /> Schede
+                  </button>
+                  <button
+                    onClick={() => setViewMode("albero")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-colors ${viewMode === "albero" ? "bg-foreground text-background" : "hover:bg-muted"}`}
+                  >
+                    <ListTree className="h-3.5 w-3.5" /> Alberatura
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
 
-            {isExploreState ? (
-              <ExploreState data={data} onPickDivision={toggleDivision} />
-            ) : viewMode === "albero" ? (
+            {viewMode === "albero" ? (
               <TreeView data={data} expanded={expandedTree} onToggle={toggleTreeNode} />
+            ) : isExploreState ? (
+              <ExploreState data={data} onPickDivision={toggleDivision} />
             ) : (
               <SchedeView
                 results={pageResults}
@@ -539,16 +536,20 @@ export default function CodiciCpvPage() {
           </div>
         </div>
       </div>
-      )}
+        )}
+      </main>
 
       {/* ── Footer ── */}
-      <footer className="border-t py-8 mt-12">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          Vocabolario CPV 2008 (Reg. CE 213/2008) — dati ufficiali{" "}
-          <a href="https://ted.europa.eu/simap/codes-and-nomenclatures/cpv" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-            TED / SIMAP
-          </a>
-          .
+      <footer className="border-t border-border py-7 mt-auto">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <span className="text-xs text-muted-foreground font-medium tracking-wide">Tender AI DB</span>
+            <p className="text-xs text-muted-foreground text-center">
+              Vocabolario CPV 2008 (Reg. CE 213/2008){" "}
+              <a href="https://ted.europa.eu/simap/codes-and-nomenclatures/cpv" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline underline-offset-2">TED / SIMAP</a>
+            </p>
+            <span className="text-[10px] text-muted-foreground/50 tracking-[0.12em] uppercase">Dati ufficiali CE</span>
+          </div>
         </div>
       </footer>
     </div>

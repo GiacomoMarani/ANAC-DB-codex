@@ -639,6 +639,7 @@ export function GareListClient() {
   const [scadenza, setScadenza] = useState("")
   const [pubblicazione, setPubblicazione] = useState("")
   const [source,   setSource]   = useState<SourceKey | "all">("all")
+  const [cpv,      setCpv]      = useState("")
   const [page,     setPage]     = useState(0)
   const [showAiModal, setShowAiModal] = useState(false)
   const [showRecent, setShowRecent] = useState(false)
@@ -646,6 +647,7 @@ export function GareListClient() {
   const searchRef = useRef<HTMLDivElement>(null)
 
   const deferredSearch = useDebounce(search, 300)
+  const deferredCpv    = useDebounce(cpv, 400)
 
   // Load recent searches on mount
   useEffect(() => {
@@ -695,8 +697,9 @@ export function GareListClient() {
       if (range?.max != null) params.set("importo_max", String(range.max))
     }
     if (pubblicazione && pubblicazione !== "all") params.set("pubblicazione", pubblicazione)
+    if (deferredCpv.trim()) params.set("cpv", deferredCpv.trim())
     return params.toString()
-  }, [needAnac, page, deferredSearch, tipo, importo, pubblicazione])
+  }, [needAnac, page, deferredSearch, tipo, importo, pubblicazione, deferredCpv])
 
   const { data: anacData, isLoading: anacLoading } = useSWR<CigApiResponse>(
     needAnac ? `/api/cig?${anacQueryString}` : null,
@@ -738,8 +741,9 @@ export function GareListClient() {
     if (scadenza && scadenza !== "all") params.set("scadenza", scadenza)
     if (pubblicazione && pubblicazione !== "all") params.set("pubblicazione", pubblicazione)
     if (source  && source  !== "all") params.set("source",  source)
+    if (deferredCpv.trim()) params.set("cpv", deferredCpv.trim())
     return params.toString()
-  }, [page, deferredSearch, tipo, importo, scadenza, pubblicazione, source, needTenders])
+  }, [page, deferredSearch, tipo, importo, scadenza, pubblicazione, source, needTenders, deferredCpv])
 
   const { data, isLoading: swrLoading } = useSWR<TendersResponse>(
     needTenders ? `/api/tenders?${queryString}` : null,
@@ -786,12 +790,12 @@ export function GareListClient() {
   const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0
 
   const resetFilters = useCallback(() => {
-    setSearch(""); setTipo(""); setImporto(""); setScadenza(""); setPubblicazione(""); setSource("all"); setPage(0)
+    setSearch(""); setTipo(""); setImporto(""); setScadenza(""); setPubblicazione(""); setSource("all"); setCpv(""); setPage(0)
   }, [])
 
   const handleFilterChange = useCallback(() => setPage(0), [])
 
-  const hasFilters = !!(search || tipo || importo || scadenza || pubblicazione || source !== "all")
+  const hasFilters = !!(search || tipo || importo || scadenza || pubblicazione || source !== "all" || cpv)
 
   const sourceStats = data?.sources?.filter(s => s.count > 0 || s.error)
 
@@ -926,6 +930,31 @@ export function GareListClient() {
             <SelectItem value="90d">Ultimi 90 giorni</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* CPV */}
+        <div className="relative flex items-center">
+          <Input
+            id="filter-cpv"
+            placeholder="Codice CPV (es. 45)"
+            value={cpv}
+            inputMode="numeric"
+            onChange={e => {
+              const onlyDigits = e.target.value.replace(/[^0-9]/g, "")
+              setCpv(onlyDigits)
+              handleFilterChange()
+            }}
+            className="w-[160px] sm:w-[185px] text-xs sm:text-sm h-9 pr-6"
+          />
+          {cpv && (
+            <button
+              onClick={() => { setCpv(""); setPage(0) }}
+              className="absolute right-2 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Cancella CPV"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
 
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground">
