@@ -52,6 +52,69 @@ export type Database = {
         }
         Relationships: []
       }
+      cato_tenders: {
+        Row: {
+          id: number
+          oggetto: string | null
+          descrizione: string | null
+          sources: string
+          importo: number | null
+          numero_gara: string | null
+          stazione_appaltante: string | null
+          tipo_procedura: string | null
+          link_web: string | null
+          is_rettifica: boolean
+          data_scadenza: string | null
+          luogo: string | null
+          created_at: string | null
+          scraped_at: string | null
+          cig: string | null
+          provincia: string | null
+          data_pubblicazione: string | null
+          codice_cpv: string | null
+        }
+        Insert: {
+          id: number
+          oggetto?: string | null
+          descrizione?: string | null
+          sources: string
+          importo?: number | null
+          numero_gara?: string | null
+          stazione_appaltante?: string | null
+          tipo_procedura?: string | null
+          link_web?: string | null
+          is_rettifica?: boolean
+          data_scadenza?: string | null
+          luogo?: string | null
+          created_at?: string | null
+          scraped_at?: string | null
+          cig?: string | null
+          provincia?: string | null
+          data_pubblicazione?: string | null
+          codice_cpv?: string | null
+        }
+        Update: {
+          id?: number
+          oggetto?: string | null
+          descrizione?: string | null
+          sources?: string
+          importo?: number | null
+          numero_gara?: string | null
+          stazione_appaltante?: string | null
+          tipo_procedura?: string | null
+          link_web?: string | null
+          is_rettifica?: boolean
+          data_scadenza?: string | null
+          luogo?: string | null
+          created_at?: string | null
+          scraped_at?: string | null
+          cig?: string | null
+          provincia?: string | null
+          data_pubblicazione?: string | null
+          codice_cpv?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

@@ -57,6 +57,30 @@ export type SourceKey =
   | "empulia"
   | "soresa"
   | "efvg"
+  // Sotto-fonti CATO scoperte 2026-09-02 (multi-page scan API):
+  | "esercito_difesa"
+  | "jaggaer"
+  | "arpa_piemonte"
+  | "cnr"
+  | "metro_roma"
+  | "comune_milano"
+  // Sotto-fonti CATO scoperte 2026-09-02 (full sync 67K → Supabase DB):
+  | "pvl_anac"
+  | "acquistinretepa"
+  | "portaletrasparenza"
+  | "gdf_gov"
+  | "veneto_cf"
+  | "cultura"
+  | "portaleappalti"
+  | "contracta"
+  | "traspare"
+  | "aulss4veneto"
+  | "estar"
+  | "infoplus"
+  | "aslroma1"
+  | "appaltiitalia"
+  | "eni_proc"
+  | "sisgap"
 
 /** Label human-readable per ogni fonte */
 export const SOURCE_LABELS: Record<SourceKey, string> = {
@@ -81,6 +105,27 @@ export const SOURCE_LABELS: Record<SourceKey, string> = {
   empulia:          "EmPulia",
   soresa:           "SoReSa Campania",
   efvg:             "Friuli Venezia Giulia",
+  esercito_difesa:  "Esercito / Difesa",
+  jaggaer:          "Jaggaer",
+  arpa_piemonte:    "ARPA Piemonte",
+  cnr:              "CNR",
+  metro_roma:       "Metro Roma",
+  comune_milano:    "Comune di Milano",
+  pvl_anac:         "PVL ANAC",
+  acquistinretepa:  "Acquisti in Rete PA",
+  portaletrasparenza: "Portale Trasparenza",
+  gdf_gov:          "Guardia di Finanza",
+  veneto_cf:        "Veneto CF",
+  cultura:          "Ministero Cultura",
+  portaleappalti:   "Portale Appalti",
+  contracta:        "Contracta",
+  traspare:         "Traspare",
+  aulss4veneto:     "AULSS4 Veneto",
+  infoplus:         "InfoPlus",
+  aslroma1:         "ASL Roma 1",
+  appaltiitalia:    "Appalti Italia",
+  eni_proc:         "ENI Procurement",
+  sisgap:           "SISGAP",
 }
 
 /** Colori badge per ogni fonte (Tailwind-compatible) */
@@ -106,6 +151,27 @@ export const SOURCE_COLORS: Record<SourceKey, { bg: string; text: string; border
   empulia:          { bg: "bg-yellow-500/15",  text: "text-yellow-700",  border: "border-yellow-200" },
   soresa:           { bg: "bg-zinc-500/15",    text: "text-zinc-700",    border: "border-zinc-200" },
   efvg:             { bg: "bg-slate-500/15",   text: "text-slate-700",   border: "border-slate-200" },
+  esercito_difesa:  { bg: "bg-red-600/15",     text: "text-red-800",     border: "border-red-300" },
+  jaggaer:          { bg: "bg-blue-600/15",    text: "text-blue-800",    border: "border-blue-300" },
+  arpa_piemonte:    { bg: "bg-green-600/15",   text: "text-green-800",   border: "border-green-300" },
+  cnr:              { bg: "bg-indigo-600/15",  text: "text-indigo-800",  border: "border-indigo-300" },
+  metro_roma:       { bg: "bg-orange-600/15",  text: "text-orange-800",  border: "border-orange-300" },
+  comune_milano:    { bg: "bg-teal-600/15",    text: "text-teal-800",    border: "border-teal-300" },
+  pvl_anac:         { bg: "bg-violet-600/15",  text: "text-violet-800",  border: "border-violet-300" },
+  acquistinretepa:  { bg: "bg-cyan-600/15",    text: "text-cyan-800",    border: "border-cyan-300" },
+  portaletrasparenza:{ bg: "bg-lime-600/15",   text: "text-lime-800",    border: "border-lime-300" },
+  gdf_gov:          { bg: "bg-amber-600/15",   text: "text-amber-800",   border: "border-amber-300" },
+  veneto_cf:        { bg: "bg-emerald-600/15", text: "text-emerald-800", border: "border-emerald-300" },
+  cultura:          { bg: "bg-pink-600/15",    text: "text-pink-800",    border: "border-pink-300" },
+  portaleappalti:   { bg: "bg-sky-600/15",     text: "text-sky-800",     border: "border-sky-300" },
+  contracta:        { bg: "bg-fuchsia-600/15", text: "text-fuchsia-800", border: "border-fuchsia-300" },
+  traspare:         { bg: "bg-rose-600/15",    text: "text-rose-800",    border: "border-rose-300" },
+  aulss4veneto:     { bg: "bg-purple-600/15",  text: "text-purple-800",  border: "border-purple-300" },
+  infoplus:         { bg: "bg-stone-600/15",   text: "text-stone-800",   border: "border-stone-300" },
+  aslroma1:         { bg: "bg-yellow-600/15",  text: "text-yellow-800",  border: "border-yellow-300" },
+  appaltiitalia:    { bg: "bg-zinc-600/15",    text: "text-zinc-800",    border: "border-zinc-300" },
+  eni_proc:         { bg: "bg-slate-600/15",   text: "text-slate-800",   border: "border-slate-300" },
+  sisgap:           { bg: "bg-red-500/15",     text: "text-red-700",     border: "border-red-200" },
 }
 
 export interface SourceResult {

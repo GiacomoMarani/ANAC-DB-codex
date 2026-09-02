@@ -25,7 +25,7 @@
  */
 import { NextRequest, NextResponse } from "next/server"
 import { fetchTED }  from "@/lib/sources/ted"
-import { fetchCato } from "@/lib/sources/cato"
+import { fetchCato, fetchCatoFromDB } from "@/lib/sources/cato"
 import { fetchANAC } from "@/lib/sources/anac"
 import type { SourceKey, SourceResult } from "@/lib/sources/types"
 
@@ -50,6 +50,28 @@ const CATO_SOURCE_MAP: Partial<Record<SourceKey, string>> = {
   empulia:          "empulia",
   soresa:           "soresa",
   efvg:             "efvg",
+  esercito_difesa:  "esercito_difesa",
+  jaggaer:          "jaggaer",
+  arpa_piemonte:    "arpa_piemonte",
+  cnr:              "cnr",
+  metro_roma:       "metro_roma",
+  comune_milano:    "comune_milano",
+  // Nuove fonti scoperte via full sync (67K gare):
+  pvl_anac:         "pvl_anac",
+  acquistinretepa:  "acquistinretepa",
+  portaletrasparenza: "portaletrasparenza",
+  gdf_gov:          "gdf_gov",
+  veneto_cf:        "veneto_cf",
+  cultura:          "cultura",
+  portaleappalti:   "portaleappalti",
+  contracta:        "contracta",
+  traspare:         "traspare",
+  aulss4veneto:     "aulss4veneto",
+  infoplus:         "infoplus",
+  aslroma1:         "aslroma1",
+  appaltiitalia:    "appaltiitalia",
+  eni_proc:         "eni_proc",
+  sisgap:           "sisgap",
   cato:             "",  // vuoto = tutte le sotto-fonti Cato, nessun filtro
   // anac: usa fetchANAC diretto
 }
@@ -110,10 +132,15 @@ async function resolveSource(
 
     const catoSrc = CATO_SOURCE_MAP[key]
     if (catoSrc !== undefined) {
+      // Try DB first (instant SQL query), fall back to API multi-page scan
+      const dbResult = await fetchCatoFromDB({ ...commonParams, source: catoSrc || undefined }, key)
+      if (dbResult) return dbResult
       return await fetchCato({ ...commonParams, source: catoSrc || undefined }, key)
     }
 
-    // Fonte sconosciuta → fallback Cato generico
+    // Fonte sconosciuta → try DB, then fallback Cato generico
+    const dbResult = await fetchCatoFromDB(commonParams, "cato")
+    if (dbResult) return dbResult
     return await fetchCato(commonParams, "cato")
   } catch (err) {
     return {

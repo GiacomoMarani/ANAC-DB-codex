@@ -75,6 +75,13 @@ const ALL_SOURCES: { value: SourceKey | "all"; label: string; flag?: string }[] 
   { value: "empulia",          label: "EmPulia",                    flag: "📡" },
   { value: "soresa",           label: "SoReSa Campania",            flag: "📡" },
   { value: "efvg",             label: "Friuli Venezia Giulia",      flag: "📡" },
+  // Sotto-fonti CATO scoperte 2026-09-02 (multi-page scan API)
+  { value: "esercito_difesa",  label: "Esercito / Difesa",          flag: "🪖" },
+  { value: "jaggaer",          label: "Jaggaer",                    flag: "📡" },
+  { value: "arpa_piemonte",    label: "ARPA Piemonte",              flag: "📡" },
+  { value: "cnr",              label: "CNR",                        flag: "🔬" },
+  { value: "metro_roma",       label: "Metro Roma",                 flag: "🚇" },
+  { value: "comune_milano",    label: "Comune di Milano",           flag: "🏛️" },
 ]
 
 // ─── Search Context (per highlight nei risultati) ─────────────────────────────

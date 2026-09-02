@@ -169,14 +169,34 @@ function mapCatoItem(item: any, defaultSource: SourceKey): NormalizedTender {
   }
 }
 
-export async function fetchCato(
-  params: CatoFetchParams,
-  defaultSource: SourceKey = "cato",
-): Promise<SourceResult> {
-  const { q, page = 0, importo, scadenza, pubblicazione, tipo, source } = params
+/**
+ * Quanti item filtrati vogliamo restituire per "pagina logica" quando un filtro
+ * sotto-fonte è attivo. L'API Cato restituisce sempre 10 item grezzi per pagina
+ * (mix di tutte le fonti), quindi servono più pagine per accumulare abbastanza
+ * risultati della fonte richiesta.
+ */
+const TARGET_FILTERED_ITEMS = 10
 
+/**
+ * Quante pagine CATO consecutive possiamo scansionare per ogni richiesta
+ * con filtro sotto-fonte attivo. 30 pagine = 300 item grezzi, sufficienti per
+ * trovare anche le fonti più rare. Cap di sicurezza per evitare fetch infiniti.
+ */
+const MAX_CATO_SCAN_PAGES = 30
+
+/** Dimensione di un batch parallelo (fetchiamo N pagine alla volta).
+ *  10 pagine in parallelo completano in ~1-2 secondi (latency rete singola). */
+const CATO_BATCH_SIZE = 10
+
+/** Numero di item per pagina restituiti dall'API CATO (costante, non configurabile) */
+const CATO_PAGE_SIZE = 10
+
+/**
+ * Costruisce i parametri di query per l'API CATO (tutto tranne il numero di pagina).
+ */
+function buildCatoQueryParams(params: CatoFetchParams): URLSearchParams {
+  const { q, importo, scadenza, tipo } = params
   const p = new URLSearchParams()
-  p.set("p", String(page))
 
   if (q?.trim()) p.set("q", q.trim())
 
@@ -198,6 +218,20 @@ export async function fetchCato(
   // ed è ignorato silenziosamente dall'API)
   if (scadenza) p.set("days", scadenza)
 
+  return p
+}
+
+/**
+ * Fetch di una singola pagina CATO e mapping in NormalizedTender[].
+ * Restituisce { items, rawTotal } dove rawTotal è il totale globale CATO.
+ */
+async function fetchCatoPage(
+  catoPage: number,
+  baseParams: URLSearchParams,
+  defaultSource: SourceKey,
+): Promise<{ items: NormalizedTender[]; rawTotal: number }> {
+  const p = new URLSearchParams(baseParams)
+  p.set("p", String(catoPage))
   const url = `${CATO_BASE}?${p.toString()}`
 
   const res = await fetch(url, {
@@ -213,36 +247,217 @@ export async function fetchCato(
   })
 
   if (!res.ok) {
+    return { items: [], rawTotal: 0 }
+  }
+
+  const raw = await res.json()
+  const items = (raw.items ?? raw.data ?? []).map((i: unknown) =>
+    mapCatoItem(i, defaultSource),
+  )
+  return { items, rawTotal: raw.total ?? 0 }
+}
+
+export async function fetchCato(
+  params: CatoFetchParams,
+  defaultSource: SourceKey = "cato",
+): Promise<SourceResult> {
+  const { page = 0, pubblicazione, source } = params
+  const baseParams = buildCatoQueryParams(params)
+
+  const publicationCutoff = pubblicazione ? getPublicationCutoff(pubblicazione) : null
+
+  // ── Modalità senza filtro sotto-fonte: fetch singola pagina (comportamento originale) ──
+  if (!source) {
+    const { items: rawItems, rawTotal } = await fetchCatoPage(page, baseParams, defaultSource)
+
+    let items = rawItems
+    if (publicationCutoff) {
+      items = items.filter((item: NormalizedTender) => isPublishedSince(item.data_pubblicazione, publicationCutoff))
+    }
+
     return {
-      items:  [],
-      total:  0,
+      items,
+      total:  publicationCutoff ? items.length : rawTotal,
       source: defaultSource,
-      error:  `Cato upstream ${res.status}`,
     }
   }
 
-  const raw   = await res.json()
-  let items = (raw.items ?? raw.data ?? []).map((i: unknown) =>
-    mapCatoItem(i, defaultSource),
+  // ── Modalità con filtro sotto-fonte: multi-page fetch ──────────────────────
+  // L'API Cato non supporta un filtro server-side per fonte — restituisce sempre
+  // 10 item grezzi per pagina (mix di tutte le fonti). Dobbiamo scansionare più
+  // pagine CATO per accumulare abbastanza item della fonte richiesta.
+  //
+  // Strategia: lanciamo tutte le pagine CATO in parallelo in un singolo
+  // Promise.all (l'API Cato regge bene il carico, verificato via test).
+  // Questo riduce la latenza da 3 batch sequenziali a 1 burst parallelo.
+
+  const startCatoPage = page * MAX_CATO_SCAN_PAGES
+  const pagesToFetch = Array.from(
+    { length: MAX_CATO_SCAN_PAGES },
+    (_, i) => startCatoPage + i,
   )
 
-  // Filtro per sotto-fonte: applicato client-side sul campo 'sources' della risposta perché
-  // l'API Cato non supporta un filtro server-side per fonte (vedi header file). Ogni pagina
-  // Cato restituisce sempre 10 item grezzi (verificato: nessun parametro di page-size ha
-  // effetto), quindi con un filtro attivo alcune pagine possono risultare vuote o parziali
-  // anche se altrove ci sono altri risultati corrispondenti.
-  if (source) {
-    items = items.filter((item: NormalizedTender) => item.sources === source)
+  const allResults = await Promise.all(
+    pagesToFetch.map(cp => fetchCatoPage(cp, baseParams, defaultSource)),
+  )
+
+  const collected: NormalizedTender[] = []
+  let totalRawScanned = 0
+  let globalRawTotal = 0
+
+  for (const result of allResults) {
+    if (result.items.length === 0) continue // pagina vuota → oltre la fine dei dati CATO
+    if (result.rawTotal > globalRawTotal) globalRawTotal = result.rawTotal
+
+    totalRawScanned += result.items.length
+
+    for (const item of result.items) {
+      if (item.sources === source) {
+        if (!publicationCutoff || isPublishedSince(item.data_pubblicazione, publicationCutoff)) {
+          collected.push(item)
+        }
+      }
+    }
   }
 
-  const publicationCutoff = pubblicazione ? getPublicationCutoff(pubblicazione) : null
-  if (publicationCutoff) {
-    items = items.filter((item: NormalizedTender) => isPublishedSince(item.data_pubblicazione, publicationCutoff))
+  // Stima il totale proporzionalmente: se su N item grezzi ne abbiamo trovati M
+  // della fonte richiesta, il totale stimato è (M/N) * totale globale CATO
+  const estimatedTotal = totalRawScanned > 0
+    ? Math.max(collected.length, Math.round((collected.length / totalRawScanned) * globalRawTotal))
+    : collected.length
+
+  return {
+    items:  collected.slice(0, TARGET_FILTERED_ITEMS),
+    total:  estimatedTotal,
+    source: defaultSource,
   }
+}
+
+// ── DB-backed fetch (uses Supabase cato_tenders table) ──────────────────────
+
+/**
+ * Fetch CATO tenders from the local Supabase `cato_tenders` table.
+ * This is used when the DB has been populated via `scripts/sync-cato.mjs`.
+ *
+ * Benefits over API-based fetch:
+ * - Instant filtering by sub-source (SQL WHERE vs client-side scan)
+ * - Real pagination with accurate total counts
+ * - Full-text search on oggetto/descrizione
+ * - All ~67K tenders available, not just the first 300
+ *
+ * Falls back to `fetchCato()` (API-based) if:
+ * - Supabase env vars are not configured
+ * - The cato_tenders table is empty or doesn't exist
+ */
+export async function fetchCatoFromDB(
+  params: CatoFetchParams,
+  defaultSource: SourceKey = "cato",
+): Promise<SourceResult | null> {
+  // Lazy import to avoid errors when Supabase is not configured
+  let createAdminClient: typeof import("@/lib/supabase/admin").createAdminClient
+  try {
+    const mod = await import("@/lib/supabase/admin")
+    createAdminClient = mod.createAdminClient
+  } catch {
+    return null // Supabase not available
+  }
+
+  let supabase: ReturnType<typeof createAdminClient>
+  try {
+    supabase = createAdminClient()
+  } catch {
+    return null // Missing env vars
+  }
+
+  const { q, page = 0, importo, scadenza, pubblicazione, source } = params
+  const PAGE_SIZE = 10
+
+  // Build query
+  let query = supabase
+    .from("cato_tenders")
+    .select("*", { count: "exact" })
+
+  // Filter by sub-source
+  if (source) {
+    query = query.eq("sources", source)
+  }
+
+  // Full-text search
+  if (q?.trim()) {
+    query = query.textSearch("fts", q.trim(), { type: "plain", config: "italian" })
+  }
+
+  // Importo range
+  if (importo) {
+    const range = IMPORTO_TO_MINMAX[importo]
+    if (range) {
+      if (range.min != null) query = query.gte("importo", range.min)
+      if (range.max != null) query = query.lte("importo", range.max)
+    }
+  }
+
+  // Scadenza (days from now)
+  if (scadenza) {
+    const days = parseInt(scadenza, 10)
+    if (!isNaN(days)) {
+      const now = new Date()
+      const deadline = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
+      query = query.gte("data_scadenza", now.toISOString())
+      query = query.lte("data_scadenza", deadline.toISOString())
+    }
+  }
+
+  // Publication date filter
+  if (pubblicazione) {
+    const cutoff = getPublicationCutoff(pubblicazione)
+    if (cutoff) {
+      query = query.gte("data_pubblicazione", cutoff.toISOString())
+    }
+  }
+
+  // Pagination & ordering
+  const from = page * PAGE_SIZE
+  const to = from + PAGE_SIZE - 1
+  query = query
+    .order("created_at", { ascending: false })
+    .range(from, to)
+
+  const { data, count, error } = await query
+
+  if (error) {
+    // Table might not exist yet
+    console.warn("[fetchCatoFromDB] Query error:", error.message)
+    return null
+  }
+
+  // If table is empty, fall back to API
+  if (!data || (data.length === 0 && page === 0 && !source && !q)) {
+    return null
+  }
+
+  // Map DB rows to NormalizedTender
+  const items: NormalizedTender[] = (data ?? []).map((row) => {
+    const src = (row.sources ?? defaultSource) as SourceKey
+    return {
+      id:                  `${src}:${row.id}`,
+      cig:                 row.cig ?? row.numero_gara ?? String(row.id),
+      oggetto:             row.oggetto,
+      importo:             row.importo ? Number(row.importo) : null,
+      stato:               "active",
+      provincia:           row.provincia,
+      data_pubblicazione:  row.data_pubblicazione,
+      data_scadenza:       row.data_scadenza,
+      tipo_contratto:      row.tipo_procedura,
+      descrizione_cpv:     row.codice_cpv,
+      sources:             src,
+      link_originale:      row.link_web,
+      stazione_appaltante: row.stazione_appaltante,
+    }
+  })
 
   return {
     items,
-    total:  (source || publicationCutoff) ? items.length : raw.total ?? items.length,
+    total:  count ?? items.length,
     source: defaultSource,
   }
 }

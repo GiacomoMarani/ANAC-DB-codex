@@ -6,11 +6,13 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "sync:cato": "node scripts/sync-cato.mjs",
+    "sync:cato:full": "node scripts/sync-cato.mjs --full"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
     "@hookform/resolvers": "^3.10.0",
+    "@huggingface/transformers": "^4.2.0",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",
@@ -51,7 +53,9 @@
     "lucide-react": "^0.454.0",
     "next": "16.0.10",
     "next-themes": "^0.4.6",
-    "playwright": "^1.60.0",
+    "pg": "^8.23.0",
+    "playwright": "^1.62.1",
+    "puppeteer": "^25.9.0",
     "react": "19.2.0",
     "react-day-picker": "9.8.0",
     "react-dom": "19.2.0",
