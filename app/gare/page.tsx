@@ -17,7 +17,7 @@ const SOURCES = [
 
 export default function GarePage() {
   return (
-    <div className="min-h-[100dvh] bg-background flex flex-col">
+    <div className="min-h-[100dvh] bg-background flex flex-col overflow-x-hidden">
       <SiteNav variant="gare" />
 
       <section className="relative border-b border-border overflow-hidden">

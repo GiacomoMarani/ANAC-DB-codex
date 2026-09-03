@@ -576,7 +576,7 @@ function ScadenzaBadge({ data }: { data: string | null }) {
 
 function SourceBadge({ source }: { source: string }) {
   const key    = source as SourceKey
-  const colors = SOURCE_COLORS[key] ?? { bg: "bg-gray-500/15", text: "text-gray-700", border: "border-gray-200" }
+  const colors = SOURCE_COLORS[key] ?? { bg: "bg-gray-500/15", text: "text-gray-700 dark:text-gray-300", border: "border-gray-200 dark:border-gray-700" }
   const label  = SOURCE_LABELS[key] ?? source.toUpperCase()
   const entry  = ALL_SOURCES.find(s => s.value === key)
 
@@ -711,7 +711,7 @@ export function GareListClient() {
   const { data: anacData, isLoading: anacLoading } = useSWR<CigApiResponse>(
     needAnac ? `/api/cig?${anacQueryString}` : null,
     fetcher,
-    { revalidateOnFocus: false, keepPreviousData: true },
+    { revalidateOnFocus: false, keepPreviousData: true, dedupingInterval: 2000 },
   )
 
   // Map /api/cig response to TenderItem format
@@ -755,7 +755,7 @@ export function GareListClient() {
   const { data, isLoading: swrLoading } = useSWR<TendersResponse>(
     needTenders ? `/api/tenders?${queryString}` : null,
     fetcher,
-    { revalidateOnFocus: false, keepPreviousData: true },
+    { revalidateOnFocus: false, keepPreviousData: true, dedupingInterval: 2000 },
   )
 
   // ── Dati unificati ─────────────────────────────────────────────────────────
@@ -863,7 +863,7 @@ export function GareListClient() {
       </div>
 
       {/* ── Filters ── */}
-      <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3 sm:items-center">
         <SlidersHorizontal className="h-4 w-4 text-muted-foreground shrink-0" />
 
         {/* Fonte */}
@@ -871,7 +871,7 @@ export function GareListClient() {
           value={source}
           onValueChange={v => { setSource(v as SourceKey | "all"); handleFilterChange() }}
         >
-          <SelectTrigger id="filter-source" className="w-[160px] sm:w-[220px] text-xs sm:text-sm">
+          <SelectTrigger id="filter-source" className="w-full sm:w-[220px] text-xs sm:text-sm">
             <Globe className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
             <SelectValue placeholder="Tutte le fonti" />
           </SelectTrigger>
@@ -887,7 +887,7 @@ export function GareListClient() {
 
         {/* Tipo procedura */}
         <Select value={tipo || "all"} onValueChange={v => { setTipo(v === "all" ? "" : v); handleFilterChange() }}>
-          <SelectTrigger id="filter-tipo" className="w-[140px] sm:w-[180px] text-xs sm:text-sm">
+          <SelectTrigger id="filter-tipo" className="w-full sm:w-[180px] text-xs sm:text-sm">
             <SelectValue placeholder="Tipo procedura" />
           </SelectTrigger>
           <SelectContent>
@@ -900,7 +900,7 @@ export function GareListClient() {
 
         {/* Importo */}
         <Select value={importo || "all"} onValueChange={v => { setImporto(v === "all" ? "" : v); handleFilterChange() }}>
-          <SelectTrigger id="filter-importo" className="w-[140px] sm:w-[180px] text-xs sm:text-sm">
+          <SelectTrigger id="filter-importo" className="w-full sm:w-[180px] text-xs sm:text-sm">
             <SelectValue placeholder="Valore appalto" />
           </SelectTrigger>
           <SelectContent>
@@ -916,7 +916,7 @@ export function GareListClient() {
         {/* Scadenza (solo non-ANAC: BANDI_IN_CORSO è già filtrato) */}
         {!isAnacMode && (
           <Select value={scadenza || "all"} onValueChange={v => { setScadenza(v === "all" ? "" : v); handleFilterChange() }}>
-            <SelectTrigger id="filter-scadenza" className="w-[150px] sm:w-[180px] text-xs sm:text-sm">
+            <SelectTrigger id="filter-scadenza" className="w-full sm:w-[180px] text-xs sm:text-sm">
               <SelectValue placeholder="Scadenza offerte" />
             </SelectTrigger>
             <SelectContent>
@@ -930,7 +930,7 @@ export function GareListClient() {
 
         {/* Pubblicazione */}
         <Select value={pubblicazione || "all"} onValueChange={v => { setPubblicazione(v === "all" ? "" : v); handleFilterChange() }}>
-          <SelectTrigger id="filter-pubblicazione" className="w-[165px] sm:w-[190px] text-xs sm:text-sm">
+          <SelectTrigger id="filter-pubblicazione" className="w-full sm:w-[190px] text-xs sm:text-sm">
             <Clock className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
             <SelectValue placeholder="Pubblicazione" />
           </SelectTrigger>
@@ -955,7 +955,7 @@ export function GareListClient() {
               setCpv(onlyDigits)
               handleFilterChange()
             }}
-            className="w-[160px] sm:w-[185px] text-xs sm:text-sm h-9 pr-6"
+            className="w-full sm:w-[185px] text-xs sm:text-sm h-9 pr-6"
           />
           {cpv && (
             <button
@@ -1127,20 +1127,20 @@ function TenderCard({ tender }: { tender: TenderItem }) {
           </Badge>
         )}
         {isActive && (
-          <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-200 font-medium text-xs px-2 py-0.5">
+          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700 font-medium text-xs px-2 py-0.5">
             ● ATTIVA
           </Badge>
         )}
         {/* Badge fonte colorato */}
         <SourceBadge source={tender.sources} />
         {cpvCodes && (
-          <Badge variant="outline" className="font-mono text-[10px] sm:text-xs max-w-[180px] sm:max-w-[240px] truncate" title={cpvCodes}>
+          <Badge variant="outline" className="font-mono text-[10px] sm:text-xs max-w-[180px] sm:max-w-[240px] truncate dark:text-muted-foreground" title={cpvCodes}>
             CPV: {cpvCodes}
           </Badge>
         )}
         {/* Badge PNRR (solo ANAC) */}
         {(tender as NormalizedTender & { flag_pnrr_pnc?: string }).flag_pnrr_pnc === "Sì" && (
-          <Badge className="bg-amber-500/15 text-amber-700 border-amber-200 text-xs font-medium">
+          <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-700 text-xs font-medium">
             PNRR/PNC
           </Badge>
         )}
