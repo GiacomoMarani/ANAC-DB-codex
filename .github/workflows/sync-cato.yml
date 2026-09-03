@@ -1,0 +1,56 @@
+name: "CATO Sync (daily)"
+
+on:
+  schedule:
+    # Ogni giorno alle 06:00 UTC (08:00 ora italiana)
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Sync mode"
+        required: true
+        default: "incremental"
+        type: choice
+        options:
+          - incremental
+          - full
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+jobs:
+  sync:
+    name: "Sync CATO tenders"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run CATO sync
+        run: |
+          if [ "${{ github.event.inputs.mode }}" = "full" ]; then
+            echo "🔄 Running FULL sync..."
+            node scripts/sync-cato.mjs --full
+          else
+            echo "🔄 Running INCREMENTAL sync..."
+            node scripts/sync-cato.mjs
+          fi
+
+      - name: Report result
+        if: always()
+        run: |
+          if [ -f scripts/.sync-cato-state.json ]; then
+            echo "📊 Sync state:"
+            cat scripts/.sync-cato-state.json
+          fi
