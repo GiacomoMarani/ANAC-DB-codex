@@ -236,6 +236,23 @@ export async function GET(request: NextRequest) {
     return item.data_scadenza >= now.slice(0, 10) // confronto YYYY-MM-DD
   })
 
+  // Filtra per scadenza massima (giorni dalla scadenza)
+  // Solo Bandolo applica questo filtro server-side; per TED/Cato/CatoFromDB
+  // applichiamo il filtro qui come post-filter
+  if (scadenza) {
+    const maxDays = parseInt(scadenza, 10)
+    if (Number.isFinite(maxDays) && maxDays > 0) {
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() + maxDays)
+      const cutoffStr = cutoffDate.toISOString().slice(0, 10)
+      allItems = allItems.filter(item => {
+        if (!item.data_scadenza) return true // senza scadenza → tieni
+        return item.data_scadenza <= cutoffStr
+      })
+      totalItems = allItems.length
+    }
+  }
+
   const publicationCutoff = pubblicazione ? getPublicationCutoff(pubblicazione) : null
   if (publicationCutoff) {
     allItems = allItems.filter(item => isPublishedSince(item.data_pubblicazione, publicationCutoff))

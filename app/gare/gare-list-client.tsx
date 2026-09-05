@@ -826,7 +826,8 @@ export function GareListClient() {
 
   const isLoading = isAnacMode ? anacLoading : isAllMode ? (swrLoading || anacLoading) : swrLoading
   const pageSize  = isAnacMode ? 20 : 10
-  // BUG 1 FIX: In all-mode use client-side total (merged items), not broken sum of server totals
+  // In all-mode: items are merged client-side, so use merged items count as total
+  // In single-source mode: use server-side total for proper pagination
   const total     = isAnacMode ? (anacData?.count ?? 0) : isAllMode ? items.length : (data?.total ?? 0)
   const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0
 

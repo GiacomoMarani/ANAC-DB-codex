@@ -172,7 +172,7 @@ export default function ImportPage() {
     <div className="min-h-screen bg-background">
       <SiteNav variant="gare" />
       <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <Link href="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6">
+        <Link href="/gare" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
           Torna alla consultazione
         </Link>
@@ -258,7 +258,7 @@ export default function ImportPage() {
                 )}
 
                 <Button asChild className="w-full">
-                  <Link href="/">Vai alla consultazione</Link>
+                  <Link href="/gare">Vai alla consultazione</Link>
                 </Button>
               </div>
             )}
@@ -360,7 +360,7 @@ export default function ImportPage() {
                   ))}
                 </div>
                 <Button asChild className="w-full">
-                  <Link href="/">Vai alla consultazione</Link>
+                  <Link href="/gare">Vai alla consultazione</Link>
                 </Button>
               </div>
             )}
