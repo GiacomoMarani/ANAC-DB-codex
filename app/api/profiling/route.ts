@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     // 2. aggiudicatari (tabella locale) → gare vinte reali per questa P.IVA
     // 3. cig (fallback) → campione generico se non ci sono aggiudicatari
 
-    const [viesResult, aggiudicatariResult, dbResult] = await Promise.all([
+    const [viesResult, aggiudicatariResult] = await Promise.all([
       lookupVies(piva),
       supabase
         .from("aggiudicatari")
@@ -70,15 +70,9 @@ export async function POST(req: Request) {
         .eq("codice_fiscale", piva)
         .order("data_aggiudicazione", { ascending: false })
         .limit(500),
-      supabase
-        .from("cig")
-        .select("oggetto_gara, importo_lotto, oggetto_principale_contratto, stato, provincia, data_pubblicazione, data_scadenza_offerta, sezione_regionale, descrizione_cpv, esito")
-        .order("data_pubblicazione", { ascending: false })
-        .limit(200),
     ])
 
     const { data: aggiudicatariData } = aggiudicatariResult
-    const { data: cigData, error: dbError } = dbResult
 
     // Se abbiamo dati reali dall'aggiudicatari table, usiamo quelli
     const hasRealData = aggiudicatariData && aggiudicatariData.length > 0
@@ -198,143 +192,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ profile })
     }
 
-    // ── PATH B: Fallback su campione generico da CIG ────────────────
-    if (dbError) {
-      console.warn("[profiling] DB query error:", dbError.message)
-      return NextResponse.json({ profile })
-    }
-
-    if (!cigData || cigData.length === 0) {
-      return NextResponse.json({ profile })
-    }
-
-    // ── Aggregazione dati ────────────────────────────────────────
-    const cpvMap = new Map<string, { code: string; description: string; count: number; total_value: number }>()
-    const provMap = new Map<string, number>()
-    const tipoMap = new Map<string, number>()
-    const dates: number[] = []
-    let importoTotale = 0
-    let gareConclusePositive = 0
-
-    for (const row of cigData) {
-      const importo = Number(row.importo_lotto) || 0
-      importoTotale += importo
-
-      // Date
-      if (row.data_pubblicazione) {
-        const ts = new Date(row.data_pubblicazione).getTime()
-        if (!isNaN(ts)) dates.push(ts)
-      }
-
-      // Province
-      if (row.provincia && row.provincia.trim()) {
-        const p = row.provincia.trim().toUpperCase()
-        provMap.set(p, (provMap.get(p) || 0) + 1)
-      }
-
-      // Tipo contratto (da oggetto_principale_contratto)
-      if (row.oggetto_principale_contratto) {
-        const tipo = normalizeContractType(row.oggetto_principale_contratto)
-        if (tipo) {
-          tipoMap.set(tipo, (tipoMap.get(tipo) || 0) + 1)
-        }
-      }
-
-      // Esito = "aggiudicata" o simile
-      if (row.esito) {
-        const esitoUpper = row.esito.toUpperCase()
-        if (esitoUpper.includes("AGGIUDICAT") || esitoUpper.includes("CONCLUS")) {
-          gareConclusePositive++
-        }
-      }
-
-      // CPV: parse dal campo descrizione_cpv
-      // Formato tipico: "72210000-7 - Servizi di programmazione di pacchetti software"
-      // oppure solo testo descrittivo
-      if (row.descrizione_cpv && row.descrizione_cpv.trim()) {
-        const cpvParsed = parseCpvField(row.descrizione_cpv)
-        const key = cpvParsed.code
-
-        if (!cpvMap.has(key)) {
-          cpvMap.set(key, {
-            code: cpvParsed.code,
-            description: cpvParsed.description,
-            count: 0,
-            total_value: 0,
-          })
-        }
-        const entry = cpvMap.get(key)!
-        entry.count += 1
-        entry.total_value += importo
-      }
-    }
-
-    const totalGare = cigData.length
-
-    // ── Costruzione profilo ──────────────────────────────────────
-    profile.totale_gare = totalGare
-    profile.gare_vinte = gareConclusePositive
-    profile.importo_totale = importoTotale
-    profile.importo_medio = totalGare > 0 ? Math.round(importoTotale / totalGare) : 0
-
-    // Date
-    if (dates.length > 0) {
-      dates.sort((a, b) => a - b)
-      profile.prima_gara = new Date(dates[0]).toISOString().split("T")[0]
-      profile.ultima_gara = new Date(dates[dates.length - 1]).toISOString().split("T")[0]
-    }
-
-    // Sede: VIES ha priorità, fallback su provincia più frequente dal DB
-    if (!profile.sede && provMap.size > 0) {
-      const topProvincia = [...provMap.entries()].sort((a, b) => b[1] - a[1])[0]
-      profile.sede = topProvincia[0]
-      if (!profile.regione) {
-        profile.regione = provinciaToRegione(topProvincia[0])
-      }
-    }
-
-    // CPV codes (top 30)
-    profile.cpv_codes = [...cpvMap.values()]
-      .map((c) => ({
-        ...c,
-        percentage: totalGare > 0 ? Math.round((c.count / totalGare) * 100) : 0,
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 30)
-
-    // CPV divisions (aggregazione per prime 2 cifre)
-    const divMap = new Map<string, { division: string; label: string; count: number }>()
-    for (const c of profile.cpv_codes) {
-      const div = c.code.length >= 2 ? c.code.substring(0, 2) : "??"
-      if (!divMap.has(div)) {
-        divMap.set(div, { division: div, label: cpvDivisionLabel(div), count: 0 })
-      }
-      divMap.get(div)!.count += c.count
-    }
-
-    profile.cpv_divisions = [...divMap.values()]
-      .map((d) => ({
-        ...d,
-        percentage: totalGare > 0 ? Math.round((d.count / totalGare) * 100) : 0,
-      }))
-      .sort((a, b) => b.count - a.count)
-
-    // Province (top 10)
-    profile.province = [...provMap.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10)
-
-    // Tipi contratto
-    profile.tipi_contratto = [...tipoMap.entries()]
-      .map(([tipo, count]) => ({
-        tipo,
-        count,
-        percentage: totalGare > 0 ? Math.round((count / totalGare) * 100) : 0,
-      }))
-      .sort((a, b) => b.count - a.count)
-
-    return NextResponse.json({ profile })
+    // ── P.IVA non trovata: restituisci profilo vuoto con dati VIES ──
+    // NON fabbrichiamo dati falsi dal campione CIG generico.
+    return NextResponse.json({
+      profile,
+      foundInRegistry: false,
+      message: "Nessuna aggiudicazione trovata nel database ANAC per questa Partita IVA.",
+    })
   } catch (err) {
     console.error("[profiling] Unhandled error:", err)
     return NextResponse.json(

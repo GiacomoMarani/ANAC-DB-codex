@@ -441,8 +441,22 @@ function AiKeyModal({ onClose }: { onClose: () => void }) {
 
 // ─── Helpers per rendering AI ────────────────────────────────────────────────
 
+function sanitizeHtml(html: string): string {
+  // Strip script/style/iframe/object tags and on* event handlers
+  return html
+    .replace(/<script\b[^]*?<\/script>/gi, "")
+    .replace(/<style\b[^]*?<\/style>/gi, "")
+    .replace(/<iframe\b[^]*?(?:\/>|<\/iframe>)/gi, "")
+    .replace(/<object\b[^]*?(?:\/>|<\/object>)/gi, "")
+    .replace(/<embed\b[^]*?(?:\/>|>)/gi, "")
+    .replace(/\bon\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, "")
+    .replace(/javascript\s*:/gi, "")
+}
+
 function renderAiHtml(md: string): string {
-  return md
+  // Sanitize first to prevent XSS from LLM grounded content
+  const safe = sanitizeHtml(md)
+  return safe
     // Separatore orizzontale
     .replace(/^---$/gm, '<hr class="border-amber-200 dark:border-amber-800/40 my-3" />')
     // Titoli

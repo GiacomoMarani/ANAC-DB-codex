@@ -239,7 +239,7 @@ export function buildAnacCigUrl(cig: string, anacIdAvviso?: string | null): stri
   if (anacIdAvviso) {
     return `https://pubblicitalegale.anticorruzione.it/bandi/${anacIdAvviso}?ricercaArchivio=false`
   }
-  // Fallback: dettaglio CIG su portale dati aperti ANAC
-  return `https://dettaglio-cig.anticorruzione.it/cig/${encodeURIComponent(cig)}`
+  // Fallback: ricerca CIG sul portale pubblicità legale ANAC
+  return `https://pubblicitalegale.anticorruzione.it/ricerca?cig=${encodeURIComponent(cig)}`
 }
 

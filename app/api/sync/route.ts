@@ -4,7 +4,20 @@ import { syncMonth, getRecentMonths } from "@/lib/services/anacSync"
 // Allow up to 5 minutes for full sync on Vercel Pro; free tier max is 60s
 export const maxDuration = 300
 
+function checkAuth(request: NextRequest): NextResponse | null {
+  const secret = process.env.CRON_SECRET
+  if (!secret) return null // no secret configured = allow (dev mode)
+  const auth = request.headers.get("authorization")
+  if (auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  return null
+}
+
 export async function POST(request: NextRequest) {
+  const authError = checkAuth(request)
+  if (authError) return authError
+
   // Optional: allow caller to specify which months to sync
   let months: string[]
   try {
@@ -51,7 +64,10 @@ export async function POST(request: NextRequest) {
 }
 
 // GET is used by Vercel Cron Jobs (no body)
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authError = checkAuth(request)
+  if (authError) return authError
+
   const months = getRecentMonths(1) // cron: only the current month
   try {
     const result = await syncMonth(months[0])
