@@ -310,8 +310,11 @@ export default function ProfilazionePage() {
             const matchData = await matchRes.json()
             setMatches(matchData.matches || [])
           }
-        } catch {
-          // Non-blocking: matches are optional
+        } catch (matchErr) {
+          // Log the error so it's traceable; matches are optional but the user
+          // should know if the API failed rather than seeing "no results"
+          console.warn("Errore nel recupero dei bandi compatibili:", matchErr)
+          setMatches([])
         } finally {
           setMatchesLoading(false)
         }

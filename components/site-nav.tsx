@@ -48,14 +48,12 @@ export function SiteNav({ variant = "gare" }: SiteNavProps) {
               Profilazione
             </Link>
           )}
-          <a
-            href="https://tender-ai-pro.onrender.com/"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href="/ricerca-gare"
             className="px-3 py-1.5 rounded-md text-xs font-medium text-primary border border-primary/30 hover:bg-primary/10 hover:border-primary/60 transition-all duration-150 whitespace-nowrap"
           >
             Analisi avanzata
-          </a>
+          </Link>
         </nav>
       </div>
     </header>

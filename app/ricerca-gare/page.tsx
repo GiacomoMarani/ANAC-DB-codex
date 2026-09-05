@@ -112,7 +112,7 @@ export default function RicercaGarePage() {
       const widgetRes = await fetch(`/api/tenders/widget?cpv=${cpvParam}&kw=${kwParam}`)
       const widgetData: WidgetResponse = await widgetRes.json()
       setTenders(widgetData.items || [])
-      setTotalTenders((widgetData.items || []).length + 3) // simulate "locked" count
+      setTotalTenders((widgetData.items || []).length)
 
       clearTimeout(stepTimer1); clearTimeout(stepTimer2)
       setStep("results")
@@ -141,7 +141,7 @@ export default function RicercaGarePage() {
       <div className="min-h-screen bg-background">
         <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10">
           <div className="container mx-auto px-4 py-4">
-            <Link href="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit">
+            <Link href="/gare" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit">
               <ArrowLeft className="h-4 w-4" /> Torna alla home
             </Link>
           </div>
@@ -267,7 +267,7 @@ export default function RicercaGarePage() {
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <Link href="/gare" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" /> Torna alla home
           </Link>
           <button
@@ -324,10 +324,10 @@ export default function RicercaGarePage() {
         {/* Results count */}
         <div className="flex items-center justify-between mb-4">
           <p className="font-semibold">
-            Risultati Trovati (<span className="text-primary">{displayedTenders.length + 3}</span>)
+            Risultati Trovati (<span className="text-primary">{displayedTenders.length}</span>)
           </p>
           <p className="text-sm text-muted-foreground">
-            Mostrando 1–{Math.min(3, displayedTenders.length)} di {displayedTenders.length + 3}
+            Mostrando 1–{Math.min(3, displayedTenders.length)} di {displayedTenders.length}
           </p>
         </div>
 
@@ -377,11 +377,11 @@ export default function RicercaGarePage() {
         </div>
 
         {/* Locked results paywall */}
-        {displayedTenders.length > 0 && (
+        {displayedTenders.length > 3 && (
           <div className="border-2 border-dashed rounded-xl p-8 bg-muted/30 text-center">
-            <p className="font-semibold mb-1">Sblocca tutti i risultati</p>
+            <p className="font-semibold mb-1">Vedi tutti i risultati</p>
             <p className="text-sm text-muted-foreground mb-4">
-              Ci sono altre <span className="font-medium">{Math.max(0, displayedTenders.length - 3) + 3}</span> gare che corrispondono ai tuoi criteri.
+              Ci sono altre <span className="font-medium">{displayedTenders.length - 3}</span> gare che corrispondono ai tuoi criteri.
             </p>
             <Link href="/gare">
               <Button id="btn-sblocca-risultati">
@@ -434,9 +434,12 @@ export default function RicercaGarePage() {
               </div>
               {reportSent ? (
                 <div className="text-center py-8">
-                  <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
-                  <p className="font-semibold text-lg">Report in arrivo!</p>
-                  <p className="text-muted-foreground text-sm mt-2">Riceverai l&apos;analisi a {reportForm.email} entro 5 minuti.</p>
+                  <CheckCircle2 className="h-12 w-12 text-primary mx-auto mb-4" />
+                  <p className="font-semibold text-lg">Funzionalità in arrivo!</p>
+                  <p className="text-muted-foreground text-sm mt-2">
+                    I report via email saranno disponibili a breve. Nel frattempo, puoi consultare tutti i bandi nella sezione{" "}
+                    <Link href="/gare" className="text-primary hover:underline">Gare →</Link>
+                  </p>
                 </div>
               ) : (
                 <>

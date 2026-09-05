@@ -154,7 +154,9 @@ function clearRecentSearches() {
 
 function daysUntil(d: string | null): number | null {
   if (!d) return null
-  const diff = new Date(d).getTime() - Date.now()
+  // Treat YYYY-MM-DD dates as local midnight, not UTC
+  const dateStr = d.length === 10 ? `${d}T00:00:00` : d
+  const diff = new Date(dateStr).getTime() - Date.now()
   return Math.ceil(diff / 86_400_000)
 }
 
@@ -442,14 +444,10 @@ function AiKeyModal({ onClose }: { onClose: () => void }) {
 // ─── Helpers per rendering AI ────────────────────────────────────────────────
 
 function sanitizeHtml(html: string): string {
-  // Strip script/style/iframe/object tags and on* event handlers
+  // Strip ALL HTML tags — the LLM output is Markdown, not HTML.
+  // Our renderAiHtml() will convert clean Markdown to trusted HTML.
   return html
-    .replace(/<script\b[^]*?<\/script>/gi, "")
-    .replace(/<style\b[^]*?<\/style>/gi, "")
-    .replace(/<iframe\b[^]*?(?:\/>|<\/iframe>)/gi, "")
-    .replace(/<object\b[^]*?(?:\/>|<\/object>)/gi, "")
-    .replace(/<embed\b[^]*?(?:\/>|>)/gi, "")
-    .replace(/\bon\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, "")
+    .replace(/<[^>]*>/g, "")
     .replace(/javascript\s*:/gi, "")
 }
 
@@ -796,10 +794,20 @@ export function GareListClient() {
     })
     // Rimuovi gare con scadenza passata
     const today = new Date().toISOString().slice(0, 10)
-    const active = deduped.filter(item => {
+    let active = deduped.filter(item => {
       if (!item.data_scadenza) return true
       return item.data_scadenza >= today
     })
+    // BUG 2 FIX: Applica filtro scadenza anche ai bandi ANAC in all-mode
+    if (scadenza && scadenza !== "all") {
+      const maxDays = parseInt(scadenza, 10)
+      if (Number.isFinite(maxDays) && maxDays > 0) {
+        active = active.filter(item => {
+          const d = daysUntil(item.data_scadenza)
+          return d !== null && d >= 0 && d <= maxDays
+        })
+      }
+    }
     // Ordina: ultime 48h sempre in cima, poi scadenza più vicina prima
     active.sort((a, b) => {
       const aNew = isPublishedWithinHours(a.data_pubblicazione, 48)
@@ -814,11 +822,12 @@ export function GareListClient() {
       return (b.data_pubblicazione ?? "").localeCompare(a.data_pubblicazione ?? "")
     })
     return active
-  }, [isAnacMode, isAllMode, anacItems, data?.items])
+  }, [isAnacMode, isAllMode, anacItems, data?.items, scadenza])
 
-  const total     = isAnacMode ? (anacData?.count ?? 0) : isAllMode ? ((data?.total ?? 0) + (anacData?.count ?? 0)) : (data?.total ?? 0)
   const isLoading = isAnacMode ? anacLoading : isAllMode ? (swrLoading || anacLoading) : swrLoading
   const pageSize  = isAnacMode ? 20 : 10
+  // BUG 1 FIX: In all-mode use client-side total (merged items), not broken sum of server totals
+  const total     = isAnacMode ? (anacData?.count ?? 0) : isAllMode ? items.length : (data?.total ?? 0)
   const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0
 
   const resetFilters = useCallback(() => {
@@ -840,11 +849,7 @@ export function GareListClient() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             id="gare-search"
-            placeholder={
-              isAnacMode
-                ? "Cerca per oggetto, CIG, stazione appaltante…"
-                : "Cerca per oggetto, CIG, stazione appaltante…"
-            }
+            placeholder="Cerca per oggetto, CIG, stazione appaltante…"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(0) }}
             onFocus={() => setShowRecent(true)}
@@ -1059,7 +1064,8 @@ export function GareListClient() {
 
       <SearchQueryContext.Provider value={deferredSearch}>
       <div className="space-y-4">
-        {items.map(tender => (
+        {/* BUG 1 FIX: In all-mode use client-side pagination on merged items */}
+        {(isAllMode ? items.slice(page * pageSize, (page + 1) * pageSize) : items).map(tender => (
           <TenderCard key={tender.id} tender={tender} />
         ))}
       </div>

@@ -5,12 +5,10 @@ import { useDropzone } from "react-dropzone"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { RefreshCw, CheckCircle2 as SyncCheck, AlertCircle as SyncAlert } from "lucide-react"
+import { RefreshCw, Upload, FileJson, CheckCircle2, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { isActiveTender } from "@/lib/utils/tenderLogic"
 import { SiteNav } from "@/components/site-nav"
-
-import { Upload, FileJson, CheckCircle2, AlertCircle } from "lucide-react"
 
 interface SyncResult {
   totalImported: number
@@ -325,7 +323,7 @@ export default function ImportPage() {
 
             {syncError && (
               <div className="flex items-start gap-3 p-4 bg-destructive/10 text-destructive rounded-lg">
-                <SyncAlert className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium">Errore</p>
                   <p className="text-sm">{syncError}</p>
@@ -336,7 +334,7 @@ export default function ImportPage() {
             {syncResult && (
               <div className="space-y-3">
                 <div className="flex items-start gap-3 p-4 bg-primary/10 text-primary rounded-lg">
-                  <SyncCheck className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                  <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="font-medium">Sincronizzazione completata</p>
                     <p className="text-sm">
