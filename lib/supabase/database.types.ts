@@ -115,6 +115,54 @@ export type Database = {
         }
         Relationships: []
       }
+      aggiudicatari: {
+        Row: {
+          id: number
+          codice_fiscale: string
+          denominazione: string | null
+          tipo_soggetto: string | null
+          cig: string
+          importo_aggiudicazione: number | null
+          data_aggiudicazione: string | null
+          ruolo: string | null
+          codice_cpv: string | null
+          descrizione_cpv: string | null
+          oggetto_gara: string | null
+          provincia: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: number
+          codice_fiscale: string
+          denominazione?: string | null
+          tipo_soggetto?: string | null
+          cig: string
+          importo_aggiudicazione?: number | null
+          data_aggiudicazione?: string | null
+          ruolo?: string | null
+          codice_cpv?: string | null
+          descrizione_cpv?: string | null
+          oggetto_gara?: string | null
+          provincia?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: number
+          codice_fiscale?: string
+          denominazione?: string | null
+          tipo_soggetto?: string | null
+          cig?: string
+          importo_aggiudicazione?: number | null
+          data_aggiudicazione?: string | null
+          ruolo?: string | null
+          codice_cpv?: string | null
+          descrizione_cpv?: string | null
+          oggetto_gara?: string | null
+          provincia?: string | null
+          created_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

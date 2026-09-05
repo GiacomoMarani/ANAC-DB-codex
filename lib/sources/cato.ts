@@ -51,6 +51,8 @@ export interface CatoFetchParams {
   /** Fonte specifica (valore raw del campo 'sources' Cato, es. "sintel"): filtrato
    *  client-side, l'API Cato non lo supporta lato server (vedi header file) */
   source?:   string
+  /** Filtro paese ISO (IT, FR, EU, US, etc.) — ignorato da CATO (solo IT), usato da Bandolo e TED */
+  country?:  string
 }
 
 function getPublicationCutoff(value: string): Date | null {

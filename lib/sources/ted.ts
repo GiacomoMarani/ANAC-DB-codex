@@ -169,20 +169,37 @@ export interface TedFetchParams {
   pubblicazione?: string
   tipo?:     string
   onlyIT?:   boolean
+  /** Filtro paese ISO-2 (IT, FR, DE, etc.) — sovrascrive onlyIT se specificato */
+  country?:  string
 }
 
 export async function fetchTED(
   params: TedFetchParams,
   apiKey: string,
 ): Promise<SourceResult> {
-  const { q, page = 0, pageSize = 10, importo, scadenza, pubblicazione, tipo, onlyIT = true } = params
+  const { q, page = 0, pageSize = 10, importo, scadenza, pubblicazione, tipo, onlyIT = true, country } = params
+
+  // Mappa codice ISO-2 → ISO alpha-3 per TED Expert Query
+  const ISO2_TO_ISO3: Record<string, string> = {
+    IT: "ITA", FR: "FRA", DE: "DEU", ES: "ESP", GB: "GBR", US: "USA",
+    NL: "NLD", BE: "BEL", AT: "AUT", PT: "PRT", SE: "SWE", PL: "POL",
+    CZ: "CZE", HU: "HUN", RO: "ROU", BG: "BGR", HR: "HRV", SI: "SVN",
+    SK: "SVK", LT: "LTU", LV: "LVA", EE: "EST", IE: "IRL", DK: "DNK",
+    FI: "FIN", LU: "LUX", MT: "MLT", CY: "CYP", GR: "GRC", NO: "NOR",
+    CH: "CHE",
+  }
 
   // Expert Search Query Language di TED v3
   const clauses: string[] = []
 
-  if (onlyIT) {
-    clauses.push("buyer-country=ITA")   // ISO 3166-1 alpha-3
+  // Filtro paese: country esplicito sovrascrive onlyIT
+  if (country && country !== "ALL" && country !== "INTL") {
+    const alpha3 = ISO2_TO_ISO3[country.toUpperCase()] ?? country.toUpperCase()
+    clauses.push(`buyer-country=${alpha3}`)
+  } else if (!country && onlyIT) {
+    clauses.push("buyer-country=ITA")   // default: solo Italia
   }
+  // Se country === "ALL" o "INTL" → nessun filtro paese (tutti i bandi TED)
 
   if (tipo) {
     const natureMap: Record<string, string> = {
@@ -245,7 +262,9 @@ export async function fetchTED(
     ...clauses,
   ].join(" AND ")
 
-  const defaultQuery = "buyer-country=ITA"
+  const defaultQuery = country && country !== "ALL" && country !== "INTL"
+    ? `buyer-country=${ISO2_TO_ISO3[country.toUpperCase()] ?? country.toUpperCase()}`
+    : "buyer-country=ITA"
   // SORT BY va in coda alla query (Expert Query Language), non è un parametro JSON separato:
   // così i risultati arrivano dal più recente al più vecchio invece che in ordine arbitrario.
   const query = `${expertQuery || defaultQuery} SORT BY publication-date DESC`

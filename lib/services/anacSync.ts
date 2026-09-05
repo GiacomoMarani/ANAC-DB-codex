@@ -85,7 +85,29 @@ interface OcdsRelease {
     procurementMethod?: string
     procurementMethodDetails?: string
   }
-  awards?: Array<{ status?: string; value?: { amount?: number } }>
+  awards?: Array<{
+    id?: string
+    status?: string              // "active" | "pending" | "unsuccessful" | "cancelled"
+    date?: string
+    value?: { amount?: number; currency?: string }
+    suppliers?: Array<{
+      name?: string
+      id?: string
+      identifier?: {
+        id?: string              // Codice fiscale / P.IVA dell'aggiudicatario
+        scheme?: string          // "IT-CF" o "IT-PIVA"
+        legalName?: string
+      }
+      address?: {
+        region?: string
+        locality?: string
+      }
+      roles?: string[]           // ["mandataria", "mandante", "singola"]
+      details?: {
+        scale?: string           // "micro", "small", "medium", "large"
+      }
+    }>
+  }>
   contracts?: Array<{ status?: string }>
   [key: string]: unknown
 }
@@ -141,6 +163,84 @@ function mapOcds(release: OcdsRelease): CigInsert | null {
     esito:                        trunc(release.awards?.[0]?.status, 100),
   }
 }
+
+// ─── OCDS → Aggiudicatari mapping ─────────────────────────────────────────────
+
+type AggiudicatariInsert = Database["public"]["Tables"]["aggiudicatari"]["Insert"]
+
+/**
+ * Estrae i record aggiudicatari da un OCDS Release.
+ * Un singolo release può avere più awards, ognuno con più suppliers.
+ * Restituisce un array (vuoto se non ci sono awards attivi con suppliers).
+ *
+ * Il codice fiscale dell'aggiudicatario è in: award.suppliers[].identifier.id
+ * Lo schema ANAC usa "IT-CF" come identifier.scheme.
+ */
+function extractAggiudicatari(release: OcdsRelease): AggiudicatariInsert[] {
+  const results: AggiudicatariInsert[] = []
+  const t = release.tender ?? {}
+  const cig = trunc(t.id ?? release.ocid, 50)
+  if (!cig) return results
+
+  // Dati denormalizzati dalla gara
+  const cpvId = trunc(t.items?.[0]?.classification?.id, 20)
+  const cpvDesc = trunc(t.items?.[0]?.classification?.description, 1000)
+  const oggetto = trunc(t.title, 4000)
+  const provincia = trunc(
+    t.procuringEntity?.address?.region ?? t.procuringEntity?.address?.locality,
+    100
+  )
+
+  for (const award of release.awards ?? []) {
+    // Solo awards attivi/completati (non "unsuccessful" o "cancelled")
+    const awardStatus = award.status?.toLowerCase()
+    if (awardStatus === "unsuccessful" || awardStatus === "cancelled") continue
+
+    const awardDate = trunc(award.date, 50)
+    const awardAmount = parseAmount(award.value?.amount)
+
+    for (const supplier of award.suppliers ?? []) {
+      // Il codice fiscale è il campo chiave
+      const cf = trunc(
+        supplier.identifier?.id ?? supplier.id,
+        16
+      )
+      if (!cf) continue
+
+      // Sanitizza: solo alfanumerico, rimuovi spazi
+      const cfClean = cf.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()
+      if (cfClean.length < 11) continue  // P.IVA=11 cifre, CF=16 caratteri
+
+      const denominazione = trunc(
+        supplier.identifier?.legalName ?? supplier.name,
+        1000
+      )
+
+      // Ruolo (se disponibile nei dati ANAC)
+      const ruolo = trunc(
+        supplier.roles?.[0],
+        100
+      )
+
+      results.push({
+        codice_fiscale: cfClean,
+        denominazione,
+        tipo_soggetto: null,
+        cig,
+        importo_aggiudicazione: awardAmount,
+        data_aggiudicazione: awardDate,
+        ruolo,
+        codice_cpv: cpvId,
+        descrizione_cpv: cpvDesc,
+        oggetto_gara: oggetto,
+        provincia,
+      })
+    }
+  }
+
+  return results
+}
+
 
 /**
  * Returns true if the OCDS release represents an active ("bando in corso") tender.
@@ -330,6 +430,27 @@ async function upsertBatch(
   }
 }
 
+async function upsertAggiudicatariBatch(
+  supabase: ReturnType<typeof createAdminClient>,
+  records: AggiudicatariInsert[],
+  result: SyncResult
+) {
+  if (!records.length) return
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const chunk = records.slice(i, i + BATCH_SIZE)
+    const { error } = await supabase
+      .from("aggiudicatari")
+      .upsert(chunk, { onConflict: "codice_fiscale,cig" })
+    if (error) {
+      // Non-fatal: log but don't count as main sync errors
+      if (result.errorMessages.length < 10) {
+        result.errorMessages.push(`Aggiudicatari upsert: ${error.message}`)
+      }
+    }
+    if (i + BATCH_SIZE < records.length) await delay(120)
+  }
+}
+
 // ─── Core sync function ───────────────────────────────────────────────────────
 
 /**
@@ -370,12 +491,18 @@ async function syncMonthBulk(yearMonth: string): Promise<SyncResult> {
   const res = await fetchWithRetry(url)
   const supabase = createAdminClient()
   const batch: CigInsert[] = []
+  const awardBatch: AggiudicatariInsert[] = []
   let timedOut = false
 
   const flush = async () => {
-    if (!batch.length) return
-    await upsertBatch(supabase, batch, result)
-    batch.length = 0
+    if (batch.length) {
+      await upsertBatch(supabase, batch, result)
+      batch.length = 0
+    }
+    if (awardBatch.length) {
+      await upsertAggiudicatariBatch(supabase, awardBatch, result)
+      awardBatch.length = 0
+    }
   }
 
   try {
@@ -388,7 +515,19 @@ async function syncMonthBulk(yearMonth: string): Promise<SyncResult> {
 
       result.fetched++
 
-      // ── Filter: only "bandi in corso" (active tenders) ──────────────────
+      // ── Estrai aggiudicatari da TUTTE le release (anche non-active) ─────
+      // Gli awards hanno il CF dell'aggiudicatario, indipendentemente
+      // dallo stato corrente della gara.
+      const awards = extractAggiudicatari(release)
+      if (awards.length > 0) {
+        awardBatch.push(...awards)
+        if (awardBatch.length >= BATCH_SIZE) {
+          await upsertAggiudicatariBatch(supabase, awardBatch, result)
+          awardBatch.length = 0
+        }
+      }
+
+      // ── Filter: only "bandi in corso" (active tenders) for CIG upsert ───
       if (!isOcdsActive(release)) {
         result.skipped++
         continue

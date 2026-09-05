@@ -15,17 +15,20 @@
  * (indice a prefisso, tutto client-side, nessun download pesante) — replica il
  * comportamento osservato su Cato (es. "pulizia uffici" → centinaia/migliaia di
  * risultati con evidenziazione, non solo i top-20 semantici).
+ * Ricerca per codice: corsia preferenziale per query numeriche (es. "45453000", "454",
+ * "45453000-7") che fa prefix-match diretto su node.code, ispirata a elencocpv.it.
  * Ricerca AI opzionale: la ricerca semantica (Xenova/multilingual-e5-small) già
  * costruita in precedenza resta disponibile come pannello secondario on-demand.
  */
 
-import { useState, useEffect, useMemo, useCallback, type ReactNode } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { SiteNav } from "@/components/site-nav"
 import {
   Search, ChevronRight, ChevronDown, Loader2, Copy, Check, Sparkles,
-  X, ChevronLeft, LayoutGrid, ListTree,
+  X, ChevronLeft, LayoutGrid, ListTree, ExternalLink, ArrowLeft,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -76,6 +79,46 @@ function prefixKey(word: string): string {
   return word.slice(0, 5)
 }
 
+// ─── Helpers ricerca per codice ──────────────────────────────────────────────
+
+/**
+ * Restituisce true se la query assomiglia a un codice CPV numerico:
+ * almeno 2 cifre consecutive (es. "45", "454", "45453000", "45453000-7").
+ */
+function isCodeQuery(q: string): boolean {
+  return /\d{2,}/.test(q.trim())
+}
+
+/**
+ * Estrae la parte numerica pura di una query codice:
+ * "45453000-7" → "45453000", "45 453" → "45453", " 90 " → "90"
+ */
+function normalizeCodeQuery(q: string): string {
+  // Rimuove il suffisso di controllo dopo il trattino (es. "-7")
+  const withoutControl = q.trim().replace(/-\d+$/, "")
+  // Mantiene solo le cifre
+  return withoutControl.replace(/\D/g, "")
+}
+
+/**
+ * Ricerca per prefisso del codice numerico (corsia preferenziale).
+ * Restituisce l'insieme degli indici dei nodi il cui codice (senza "-N")
+ * inizia con il prefisso numerico estratto dalla query.
+ * Restituisce null se la query non è un codice.
+ */
+function codeSearch(query: string, nodes: CpvNode[]): Set<number> | null {
+  if (!isCodeQuery(query)) return null
+  const prefix = normalizeCodeQuery(query)
+  if (prefix.length < 2) return null
+  const result = new Set<number>()
+  nodes.forEach((n, i) => {
+    // node.code è tipo "45453000-7", confrontiamo solo le prime 8 cifre
+    const numericCode = n.code.replace(/-\d+$/, "")
+    if (numericCode.startsWith(prefix)) result.add(i)
+  })
+  return result
+}
+
 // ─── Caricamento dati (cache a livello di modulo) ───────────────────────────
 
 let cachedData: LoadedData | null = null
@@ -118,6 +161,33 @@ async function loadFullData(): Promise<LoadedData> {
   return cachedPromise
 }
 
+// ─── Traduzioni multilingua (lazy, caricato solo quando si apre il modal) ────
+
+interface TranslationsData {
+  langs: string[]    // ["bg","cs","da","de","el","en","es","et","fi","fr","hr","hu","it","lt","lv","mt","nl","pl","pt","ro","sk","sl","sv"]
+  codes: Record<string, (string | null)[]>  // "03000000" → array 23 stringhe nell'ordine di langs
+}
+
+const LANG_NAMES: Record<string, string> = {
+  bg: "Bulgaro", cs: "Ceco", da: "Danese", de: "Tedesco", el: "Greco",
+  en: "Inglese", es: "Spagnolo", et: "Estone", fi: "Finlandese", fr: "Francese",
+  hr: "Croato", hu: "Ungherese", it: "Italiano", lt: "Lituano", lv: "Lettone",
+  mt: "Maltese", nl: "Olandese", pl: "Polacco", pt: "Portoghese", ro: "Rumeno",
+  sk: "Slovacco", sl: "Sloveno", sv: "Svedese",
+}
+
+let cachedTranslations: TranslationsData | null = null
+let cachedTranslationsPromise: Promise<TranslationsData> | null = null
+
+async function loadTranslations(): Promise<TranslationsData> {
+  if (cachedTranslations) return cachedTranslations
+  if (cachedTranslationsPromise) return cachedTranslationsPromise
+  cachedTranslationsPromise = fetch("/cpv/cpv-translations.json")
+    .then(r => r.json())
+    .then((d: TranslationsData) => { cachedTranslations = d; return d })
+  return cachedTranslationsPromise
+}
+
 function breadcrumbOf(node: CpvNode, byCode: Map<string, CpvNode>): string[] {
   const path: string[] = []
   let cur = node.parentCode ? byCode.get(node.parentCode) : undefined
@@ -128,21 +198,53 @@ function breadcrumbOf(node: CpvNode, byCode: Map<string, CpvNode>): string[] {
   return path
 }
 
-/** Tutte le parole della query devono comparire (in etichetta o in un antenato) */
+/** Tutte le parole della query devono comparire (in etichetta o in un antenato).
+ *  Se la query contiene cifre, combina i risultati con la ricerca per codice. */
 function fullTextMatch(query: string, data: LoadedData): Set<number> | null {
   const words = tokenize(query)
-  if (words.length === 0) return null
-  const sets = words.map(w => data.index.get(prefixKey(w)) ?? [])
-  if (sets.some(s => s.length === 0)) return new Set()
-  const counts = new Map<number, number>()
-  for (const s of sets) for (const i of s) counts.set(i, (counts.get(i) ?? 0) + 1)
-  const result = new Set<number>()
-  for (const [i, c] of counts) if (c === words.length) result.add(i)
-  return result
+  const codeResults = codeSearch(query, data.nodes)
+
+  // Solo cifre (pura ricerca per codice) → usa solo codeSearch
+  if (codeResults && words.every(w => /^\d+$/.test(w))) {
+    return codeResults
+  }
+
+  // Ricerca testuale normale
+  let textResults: Set<number> | null = null
+  if (words.length > 0) {
+    const sets = words.map(w => data.index.get(prefixKey(w)) ?? [])
+    if (!sets.some(s => s.length === 0)) {
+      const counts = new Map<number, number>()
+      for (const s of sets) for (const i of s) counts.set(i, (counts.get(i) ?? 0) + 1)
+      textResults = new Set<number>()
+      for (const [i, c] of counts) if (c === words.length) textResults.add(i)
+    } else {
+      textResults = new Set()
+    }
+  }
+
+  // Query mista (testo + cifre) → unione
+  if (codeResults && textResults) {
+    const merged = new Set(textResults)
+    for (const i of codeResults) merged.add(i)
+    return merged
+  }
+
+  if (codeResults) return codeResults
+  return textResults
 }
 
-/** Punteggio di rilevanza: premia i match nell'etichetta propria (non solo negli antenati) */
-function scoreNode(node: CpvNode, words: string[]): number {
+/** Punteggio di rilevanza:
+ *  - match esatto di codice → punteggio massimo
+ *  - premia i match nell'etichetta propria (non solo negli antenati) */
+function scoreNode(node: CpvNode, words: string[], rawQuery: string): number {
+  // Bonus match esatto codice
+  if (rawQuery.trim()) {
+    const prefix = normalizeCodeQuery(rawQuery)
+    const numericCode = node.code.replace(/-\d+$/, "")
+    if (prefix.length >= 2 && numericCode === prefix) return 1_000_000
+    if (prefix.length >= 2 && numericCode.startsWith(prefix)) return 500_000 - node.code.length
+  }
   if (words.length === 0) return -node.label.length
   const ownPrefixes = new Set(tokenize(node.label).map(prefixKey))
   let ownMatches = 0
@@ -159,6 +261,23 @@ function highlight(text: string, words: string[]): ReactNode {
     re.test(part) && prefixes.some(p => stripAccents(part).startsWith(p))
       ? <mark key={i} className="bg-amber-200/70 dark:bg-amber-500/30 text-inherit rounded-sm px-0.5">{part}</mark>
       : <span key={i}>{part}</span>
+  )
+}
+
+/** Evidenzia la porzione di codice che corrisponde al prefisso numerico cercato */
+function highlightCode(code: string, rawQuery: string): ReactNode {
+  if (!isCodeQuery(rawQuery)) return code
+  const prefix = normalizeCodeQuery(rawQuery)
+  if (!prefix || prefix.length < 2) return code
+  // Separa il codice in "8 cifre" + eventuale "-N"
+  const numeric = code.replace(/-\d+$/, "")
+  const suffix = code.slice(numeric.length) // es. "-7" oppure ""
+  if (!numeric.startsWith(prefix)) return code
+  return (
+    <>
+      <mark className="bg-amber-200/70 dark:bg-amber-500/30 text-inherit rounded-sm px-0">{numeric.slice(0, prefix.length)}</mark>
+      <span>{numeric.slice(prefix.length)}{suffix}</span>
+    </>
   )
 }
 
@@ -196,10 +315,15 @@ function FacetCheckbox({ label, count, checked, onChange }: {
 const PAGE_SIZE = 20
 
 export default function CodiciCpvPage() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
   const [data, setData] = useState<LoadedData | null>(null)
   const [loadError, setLoadError] = useState("")
 
-  const [query, setQuery] = useState("")
+  // Inizializza query da ?q= nell'URL
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "")
   const deferredQuery = useDebounce(query, 200)
 
   const [selectedDivisions, setSelectedDivisions] = useState<Set<string>>(new Set())
@@ -210,10 +334,23 @@ export default function CodiciCpvPage() {
   const [page, setPage] = useState(0)
   const [expandedTree, setExpandedTree] = useState<Set<string>>(new Set())
   const [copied, setCopied] = useState<string | null>(null)
+  // Modal dettaglio codice
+  const [selectedNode, setSelectedNode] = useState<CpvNode | null>(null)
 
   useEffect(() => {
     loadFullData().then(setData).catch(err => setLoadError(err instanceof Error ? err.message : "Errore di caricamento dati"))
   }, [])
+
+  // Sincronizza ?q= nella URL quando la query cambia
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    const params = new URLSearchParams(searchParams.toString())
+    if (deferredQuery) params.set("q", deferredQuery)
+    else params.delete("q")
+    const newUrl = params.size > 0 ? `${pathname}?${params.toString()}` : pathname
+    router.replace(newUrl, { scroll: false })
+  }, [deferredQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setPage(0) }, [deferredQuery, selectedDivisions, selectedLevels, leafFilter])
 
@@ -252,8 +389,9 @@ export default function CodiciCpvPage() {
     if (!data) return []
     return [...finalIndices]
       .map(i => data.nodes[i])
-      .sort((a, b) => scoreNode(b, words) - scoreNode(a, words) || a.code.localeCompare(b.code))
-  }, [data, finalIndices, words])
+      .sort((a, b) => scoreNode(b, words, deferredQuery) - scoreNode(a, words, deferredQuery) || a.code.localeCompare(b.code))
+  }, [data, finalIndices, words, deferredQuery])
+
 
   // Conteggi per faccetta: ricalcolati escludendo SOLO la dimensione della faccetta stessa
   // (standard faceted search: gli altri filtri + la ricerca restano applicati)
@@ -417,7 +555,7 @@ export default function CodiciCpvPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 id="cpv-search"
-                placeholder="Cerca un'attività o un codice CPV"
+                placeholder='Es. "pulizia uffici" o "90911200"'
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 className="pl-9 pr-8 h-10 text-sm"
@@ -432,6 +570,14 @@ export default function CodiciCpvPage() {
                 </button>
               )}
             </div>
+            {/* Hint contestuale per ricerca per codice */}
+            {deferredQuery && isCodeQuery(deferredQuery) && (
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Search className="h-3 w-3 shrink-0" />
+                Ricerca per codice CPV attiva
+              </p>
+            )}
+
 
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -517,7 +663,7 @@ export default function CodiciCpvPage() {
             </div>
 
             {viewMode === "albero" ? (
-              <TreeView data={data} expanded={expandedTree} onToggle={toggleTreeNode} />
+              <TreeView data={data} expanded={expandedTree} onToggle={toggleTreeNode} onOpenDetail={setSelectedNode} />
             ) : isExploreState ? (
               <ExploreState data={data} onPickDivision={toggleDivision} />
             ) : (
@@ -525,12 +671,14 @@ export default function CodiciCpvPage() {
                 results={pageResults}
                 total={sortedResults.length}
                 words={words}
+                rawQuery={deferredQuery}
                 byCode={data.byCode}
                 page={page}
                 totalPages={totalPages}
                 onPage={setPage}
                 copied={copied}
                 onCopy={handleCopy}
+                onOpenDetail={setSelectedNode}
               />
             )}
           </div>
@@ -552,9 +700,20 @@ export default function CodiciCpvPage() {
           </div>
         </div>
       </footer>
+
+      {/* ── Modal dettaglio codice ── */}
+      {selectedNode && data && (
+        <CpvDetailModal
+          node={selectedNode}
+          data={data}
+          onClose={() => setSelectedNode(null)}
+          onOpenDetail={setSelectedNode}
+        />
+      )}
     </div>
   )
 }
+
 
 // ─── Stato "Esplora" (griglia divisioni, nessuna ricerca/filtro attivo) ──────
 
@@ -599,16 +758,18 @@ function ExploreState({ data, onPickDivision }: { data: LoadedData; onPickDivisi
 
 // ─── Vista "Schede" (risultati di ricerca) ───────────────────────────────────
 
-function SchedeView({ results, total, words, byCode, page, totalPages, onPage, copied, onCopy }: {
+function SchedeView({ results, total, words, rawQuery, byCode, page, totalPages, onPage, copied, onCopy, onOpenDetail }: {
   results: CpvNode[]
   total: number
   words: string[]
+  rawQuery: string
   byCode: Map<string, CpvNode>
   page: number
   totalPages: number
   onPage: (p: number) => void
   copied: string | null
   onCopy: (code: string) => void
+  onOpenDetail: (node: CpvNode) => void
 }) {
   if (total === 0) {
     return (
@@ -619,6 +780,8 @@ function SchedeView({ results, total, words, byCode, page, totalPages, onPage, c
     )
   }
 
+  const codePrefix = isCodeQuery(rawQuery) ? normalizeCodeQuery(rawQuery) : ""
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
@@ -627,12 +790,27 @@ function SchedeView({ results, total, words, byCode, page, totalPages, onPage, c
 
       {results.map(node => {
         const crumb = breadcrumbOf(node, byCode)
+        const numericCode = node.code.replace(/-\d+$/, "")
+        const isExactMatch = codePrefix.length >= 2 && numericCode === codePrefix
         return (
-          <div key={node.code} className="border rounded-xl p-3 sm:p-4 bg-card hover:shadow-sm transition-shadow flex items-start justify-between gap-3">
+          <div
+            key={node.code}
+            className={`border rounded-xl p-3 sm:p-4 bg-card hover:shadow-sm transition-shadow flex items-start justify-between gap-3 ${isExactMatch ? "border-primary/40 bg-primary/5" : ""}`}
+          >
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <LevelBadge level={node.level} />
-                <p className="font-mono text-xs sm:text-sm font-semibold text-primary">{node.code}</p>
+                <button
+                  onClick={() => onOpenDetail(node)}
+                  className="font-mono text-xs sm:text-sm font-semibold text-primary hover:underline underline-offset-2"
+                >
+                  {highlightCode(node.code, rawQuery)}
+                </button>
+                {isExactMatch && (
+                  <span className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 shrink-0">
+                    Corrispondenza esatta
+                  </span>
+                )}
               </div>
               <p className="text-sm">{highlight(node.label, words)}</p>
               {crumb.length > 0 && (
@@ -641,13 +819,20 @@ function SchedeView({ results, total, words, byCode, page, totalPages, onPage, c
                 </p>
               )}
             </div>
-            <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={() => onCopy(node.code)}>
-              {copied === node.code ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied === node.code ? "Copiato" : "Copia"}
-            </Button>
+            <div className="flex flex-col gap-1.5 shrink-0">
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onCopy(numericCode)}>
+                {copied === numericCode ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied === numericCode ? "Copiato" : "Copia"}
+              </Button>
+              <Button size="sm" variant="ghost" className="gap-1.5 text-xs text-muted-foreground h-7 px-2" onClick={() => onOpenDetail(node)}>
+                <ExternalLink className="h-3 w-3" /> Dettaglio
+              </Button>
+            </div>
           </div>
         )
       })}
+
+
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-4 border-t gap-2">
@@ -668,10 +853,11 @@ function SchedeView({ results, total, words, byCode, page, totalPages, onPage, c
 
 // ─── Vista "Alberatura" (albero gerarchico completo, indipendente dai filtri) ─
 
-function TreeView({ data, expanded, onToggle }: {
+function TreeView({ data, expanded, onToggle, onOpenDetail }: {
   data: LoadedData
   expanded: Set<string>
   onToggle: (code: string) => void
+  onOpenDetail: (node: CpvNode) => void
 }) {
   const roots = useMemo(() => data.nodes.filter(n => n.level === 1).sort((a, b) => a.code.localeCompare(b.code)), [data])
 
@@ -682,18 +868,19 @@ function TreeView({ data, expanded, onToggle }: {
       </p>
       <div className="border rounded-xl divide-y">
         {roots.map(n => (
-          <TreeNode key={n.code} node={n} data={data} expanded={expanded} onToggle={onToggle} depth={0} />
+          <TreeNode key={n.code} node={n} data={data} expanded={expanded} onToggle={onToggle} onOpenDetail={onOpenDetail} depth={0} />
         ))}
       </div>
     </div>
   )
 }
 
-function TreeNode({ node, data, expanded, onToggle, depth }: {
+function TreeNode({ node, data, expanded, onToggle, onOpenDetail, depth }: {
   node: CpvNode
   data: LoadedData
   expanded: Set<string>
   onToggle: (code: string) => void
+  onOpenDetail: (node: CpvNode) => void
   depth: number
 }) {
   const childCodes = data.childrenOf.get(node.code) ?? []
@@ -702,30 +889,265 @@ function TreeNode({ node, data, expanded, onToggle, depth }: {
 
   return (
     <div>
-      <button
-        onClick={() => hasChildren && onToggle(node.code)}
-        className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors ${!hasChildren ? "cursor-default" : ""}`}
+      <div
+        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors group"
         style={{ paddingLeft: `${0.75 + depth * 1.25}rem` }}
       >
-        {hasChildren ? (
-          isOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <span className="h-3.5 w-3.5 shrink-0 flex items-center justify-center"><span className="h-1 w-1 rounded-full bg-muted-foreground/50" /></span>
-        )}
-        <span className="font-mono text-xs text-muted-foreground shrink-0">{node.code.slice(0, 8)}</span>
-        <span className="flex-1 truncate">{node.label}</span>
-        {hasChildren && <span className="text-xs text-muted-foreground shrink-0">{childCodes.length} figli</span>}
-      </button>
+        <button
+          onClick={() => hasChildren && onToggle(node.code)}
+          className={`shrink-0 ${!hasChildren ? "cursor-default" : ""}`}
+          aria-label={hasChildren ? (isOpen ? `Comprimi ${node.code}` : `Espandi ${node.code}`) : undefined}
+        >
+          {hasChildren ? (
+            isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <span className="h-3.5 w-3.5 flex items-center justify-center"><span className="h-1 w-1 rounded-full bg-muted-foreground/50" /></span>
+          )}
+        </button>
+        <button
+          onClick={() => onOpenDetail(node)}
+          className="font-mono text-xs text-primary hover:underline underline-offset-2 shrink-0"
+        >
+          {node.code.slice(0, 8)}
+        </button>
+        <span className="flex-1 truncate text-left">{node.label}</span>
+        {hasChildren && <span className="text-xs text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{childCodes.length} figli</span>}
+      </div>
       {isOpen && hasChildren && (
         <div>
           {childCodes
             .map(c => data.byCode.get(c)!)
             .sort((a, b) => a.code.localeCompare(b.code))
             .map(child => (
-              <TreeNode key={child.code} node={child} data={data} expanded={expanded} onToggle={onToggle} depth={depth + 1} />
+              <TreeNode key={child.code} node={child} data={data} expanded={expanded} onToggle={onToggle} onOpenDetail={onOpenDetail} depth={depth + 1} />
             ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Modal dettaglio codice CPV ──────────────────────────────────────────────
+
+function CpvDetailModal({ node, data, onClose, onOpenDetail }: {
+  node: CpvNode
+  data: LoadedData
+  onClose: () => void
+  onOpenDetail: (node: CpvNode) => void
+}) {
+  const [copied, setCopied] = useState<string | null>(null)
+  const [translations, setTranslations] = useState<TranslationsData | null>(null)
+  const [transLoading, setTransLoading] = useState(false)
+  const numericCode = node.code.replace(/-\d+$/, "")
+  const fullCode = node.code // includes check digit e.g. "45453000-7"
+  const hasCheckDigit = fullCode.includes("-")
+
+  const breadcrumb = useMemo(() => {
+    const path: CpvNode[] = []
+    let cur = node.parentCode ? data.byCode.get(node.parentCode) : undefined
+    while (cur) { path.unshift(cur); cur = cur.parentCode ? data.byCode.get(cur.parentCode) : undefined }
+    return path
+  }, [node, data])
+
+  const children = useMemo(() => {
+    const codes = data.childrenOf.get(node.code) ?? []
+    return codes.map(c => data.byCode.get(c)!).filter(Boolean).sort((a, b) => a.code.localeCompare(b.code))
+  }, [node, data])
+
+  const handleCopy = useCallback(async (code: string) => {
+    await navigator.clipboard.writeText(code)
+    setCopied(code)
+    setTimeout(() => setCopied(null), 1500)
+  }, [])
+
+  // Carica le traduzioni in background all'apertura del modal
+  useEffect(() => {
+    if (cachedTranslations) { setTranslations(cachedTranslations); return }
+    setTransLoading(true)
+    loadTranslations().then(d => { setTranslations(d); setTransLoading(false) }).catch(() => setTransLoading(false))
+  }, [])
+
+  // Chiudi con Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
+    document.addEventListener("keydown", handler)
+    return () => document.removeEventListener("keydown", handler)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Dettaglio codice CPV ${numericCode}`}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Drawer / Modal */}
+      <div className="relative z-10 w-full sm:max-w-2xl max-h-[90dvh] bg-background rounded-t-2xl sm:rounded-2xl border shadow-2xl flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b shrink-0">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <LevelBadge level={node.level} />
+              <span className="font-mono text-sm font-bold text-primary">{numericCode}</span>
+              {hasCheckDigit && (
+                <span className="text-xs text-muted-foreground font-mono">({fullCode})</span>
+              )}
+            </div>
+            <h2 className="text-base sm:text-lg font-bold leading-snug">{node.label}</h2>
+          </div>
+          <button onClick={onClose} className="shrink-0 rounded-md p-1.5 hover:bg-muted transition-colors" aria-label="Chiudi">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+
+          {/* Breadcrumb */}
+          {breadcrumb.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Percorso gerarchico</p>
+              <nav className="flex flex-wrap items-center gap-1 text-xs">
+                {breadcrumb.map((ancestor, i) => (
+                  <span key={ancestor.code} className="flex items-center gap-1">
+                    {i > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                    <button
+                      onClick={() => onOpenDetail(ancestor)}
+                      className="font-mono text-primary hover:underline underline-offset-2"
+                    >
+                      {ancestor.code.slice(0, 8)}
+                    </button>
+                    <span className="text-muted-foreground truncate max-w-[12ch]" title={ancestor.label}>
+                      {ancestor.label}
+                    </span>
+                  </span>
+                ))}
+                <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                <span className="font-mono font-semibold text-foreground">{numericCode}</span>
+              </nav>
+            </div>
+          )}
+
+          {/* Copia codice */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Copia codice</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 font-mono"
+                onClick={() => handleCopy(numericCode)}
+              >
+                {copied === numericCode ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied === numericCode ? "Copiato!" : `Copia ${numericCode}`}
+              </Button>
+              {hasCheckDigit && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-2 font-mono text-muted-foreground"
+                  onClick={() => handleCopy(fullCode)}
+                >
+                  {copied === fullCode ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied === fullCode ? "Copiato!" : `Con cifra di controllo: ${fullCode}`}
+                </Button>
+              )}
+            </div>
+            {hasCheckDigit && (
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                TED pubblica le 8 cifre senza suffisso. Alcuni portali legacy richiedono la cifra di controllo ({fullCode}).
+              </p>
+            )}
+          </div>
+
+          {/* Codici subordinati */}
+          {children.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                Codici subordinati <span className="normal-case font-normal">({children.length})</span>
+              </p>
+              <div className="border rounded-xl divide-y">
+                {children.map(child => (
+                  <div key={child.code} className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-muted/30 transition-colors">
+                    <button
+                      onClick={() => onOpenDetail(child)}
+                      className="flex items-center gap-2 min-w-0 text-left flex-1"
+                    >
+                      <span className="font-mono text-xs text-primary shrink-0">{child.code.slice(0, 8)}</span>
+                      <span className="text-sm truncate">{child.label}</span>
+                      {!child.isLeaf && <span className="text-[10px] text-muted-foreground shrink-0">+ figli</span>}
+                    </button>
+                    <button
+                      onClick={() => handleCopy(child.code.replace(/-\d+$/, ""))}
+                      className="shrink-0 p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={`Copia ${child.code}`}
+                    >
+                      {copied === child.code.replace(/-\d+$/, "") ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {node.isLeaf && children.length === 0 && (
+            <div className="rounded-xl bg-muted/40 border px-4 py-3">
+              <p className="text-sm text-muted-foreground">
+                Questo è un <span className="font-semibold text-foreground">codice foglia</span> — il più specifico disponibile in questa categoria. Non ha sottocodici.
+              </p>
+            </div>
+          )}
+
+          {/* Link esterno */}
+          {/* Traduzioni nelle 23 lingue UE */}
+          <div className="pt-1 border-t">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Questo codice in tutte le lingue UE
+            </p>
+            {transLoading && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Caricamento traduzioni…
+              </div>
+            )}
+            {translations && (() => {
+              const row = translations.codes[numericCode]
+              if (!row) return (
+                <p className="text-xs text-muted-foreground">Traduzioni non disponibili per questo codice.</p>
+              )
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                  {translations.langs.map((lang, i) => {
+                    const label = row[i]
+                    if (!label) return null
+                    return (
+                      <div key={lang} className="flex gap-2 items-baseline min-w-0">
+                        <span className="font-mono text-[10px] uppercase text-muted-foreground shrink-0 w-5">{lang}</span>
+                        <span className="text-xs leading-tight text-foreground/80">{label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+            {!transLoading && !translations && (
+              <a
+                href={`https://elencocpv.it/codice/${numericCode}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Visualizza in tutte le 23 lingue UE su elencocpv.it
+              </a>
+            )}
+          </div>
+
+        </div>
+      </div>
     </div>
   )
 }

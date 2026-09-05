@@ -30,11 +30,14 @@ export interface NormalizedTender {
   link_originale: string | null
   /** Stazione appaltante */
   stazione_appaltante: string | null
+  /** Codice paese ISO (IT, FR, EU, US, etc.) — disponibile per fonti multi-paese come Bandolo */
+  country?: string | null
 }
 
 export type SourceKey =
   | "ted"
   | "anac"
+  | "bandolo"
   | "sintel"
   | "mepa"
   | "start_toscana"
@@ -81,11 +84,26 @@ export type SourceKey =
   | "appaltiitalia"
   | "eni_proc"
   | "sisgap"
+  // Sotto-fonti Bandolo (getbandolo.com — incentivi/finanziamenti):
+  | "incentivi_gov"
+  | "invitalia"
+  | "inpa_gov"
+  | "concorsipubblici"
+  | "euraxess"
+  | "ted_bandolo"
+  | "untalent"
+  // Fonti dirette internazionali (sync indipendente da Bandolo):
+  | "boamp"
+  | "contracts_finder"
+  | "grants_gov"
+  | "ec_funding"
+  | "nih_reporter"
 
 /** Label human-readable per ogni fonte */
 export const SOURCE_LABELS: Record<SourceKey, string> = {
   ted:           "TED Europa",
   anac:          "ANAC",
+  bandolo:       "Altre fonti",
   sintel:        "Sintel",
   mepa:          "MePA",
   start_toscana: "Start Toscana",
@@ -126,12 +144,27 @@ export const SOURCE_LABELS: Record<SourceKey, string> = {
   appaltiitalia:    "Appalti Italia",
   eni_proc:         "ENI Procurement",
   sisgap:           "SISGAP",
+  // Sotto-fonti Bandolo (incentivi / finanziamenti / concorsi):
+  incentivi_gov:    "Incentivi.gov.it",
+  invitalia:        "Invitalia",
+  inpa_gov:         "InPA",
+  concorsipubblici: "Concorsi Pubblici",
+  euraxess:         "Euraxess",
+  ted_bandolo:      "TED (incentivi)",
+  untalent:         "Untalent",
+  // Fonti dirette internazionali:
+  boamp:            "BOAMP (Francia)",
+  contracts_finder: "Contracts Finder (UK)",
+  grants_gov:       "Grants.gov (USA)",
+  ec_funding:       "EU Funding Portal",
+  nih_reporter:     "NIH RePORTER",
 }
 
 /** Colori badge per ogni fonte (Tailwind-compatible) */
 export const SOURCE_COLORS: Record<SourceKey, { bg: string; text: string; border: string }> = {
   ted:           { bg: "bg-blue-500/15",   text: "text-blue-700",   border: "border-blue-200" },
   anac:          { bg: "bg-indigo-500/15", text: "text-indigo-700", border: "border-indigo-200" },
+  bandolo:       { bg: "bg-gray-400/15",   text: "text-gray-600",   border: "border-gray-200" },
   sintel:        { bg: "bg-green-500/15",  text: "text-green-700",  border: "border-green-200" },
   mepa:          { bg: "bg-teal-500/15",   text: "text-teal-700",   border: "border-teal-200" },
   start_toscana: { bg: "bg-red-500/15",    text: "text-red-700",    border: "border-red-200" },
@@ -172,6 +205,20 @@ export const SOURCE_COLORS: Record<SourceKey, { bg: string; text: string; border
   appaltiitalia:    { bg: "bg-zinc-600/15",    text: "text-zinc-800",    border: "border-zinc-300" },
   eni_proc:         { bg: "bg-slate-600/15",   text: "text-slate-800",   border: "border-slate-300" },
   sisgap:           { bg: "bg-red-500/15",     text: "text-red-700",     border: "border-red-200" },
+  // Sotto-fonti Bandolo:
+  incentivi_gov:    { bg: "bg-amber-500/15",   text: "text-amber-700",   border: "border-amber-200" },
+  invitalia:        { bg: "bg-emerald-500/15", text: "text-emerald-700", border: "border-emerald-200" },
+  inpa_gov:         { bg: "bg-sky-500/15",     text: "text-sky-700",     border: "border-sky-200" },
+  concorsipubblici: { bg: "bg-violet-500/15",  text: "text-violet-700",  border: "border-violet-200" },
+  euraxess:         { bg: "bg-cyan-600/15",    text: "text-cyan-800",    border: "border-cyan-300" },
+  ted_bandolo:      { bg: "bg-blue-600/15",    text: "text-blue-800",    border: "border-blue-300" },
+  untalent:         { bg: "bg-rose-500/15",    text: "text-rose-700",    border: "border-rose-200" },
+  // Fonti dirette internazionali:
+  boamp:            { bg: "bg-blue-500/15",    text: "text-blue-700",    border: "border-blue-200" },
+  contracts_finder: { bg: "bg-red-500/15",     text: "text-red-700",     border: "border-red-200" },
+  grants_gov:       { bg: "bg-indigo-500/15",  text: "text-indigo-700",  border: "border-indigo-200" },
+  ec_funding:       { bg: "bg-yellow-500/15",  text: "text-yellow-700",  border: "border-yellow-200" },
+  nih_reporter:     { bg: "bg-teal-500/15",    text: "text-teal-700",    border: "border-teal-200" },
 }
 
 export interface SourceResult {

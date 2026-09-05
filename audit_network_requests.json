@@ -1,0 +1,282 @@
+[
+  {
+    "url": "https://getbandolo.com/",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://getbandolo.com/assets/index-DtvKGHYS.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/clerk-DFhMSutv.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/vendor-B2Wbu4NK.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/index-miVRWpUe.css",
+    "method": "GET",
+    "resourceType": "stylesheet"
+  },
+  {
+    "url": "https://api.getbandolo.com/ping",
+    "method": "GET",
+    "resourceType": "xhr"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/LandingPage-CCjeiFMO.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/LandingFooter-CIAVBku7.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/?_v=1788505247812",
+    "method": "GET",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/clerk.browser.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/dev_browser?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2",
+    "method": "POST",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/environment?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&_method=PATCH&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "method": "POST",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/client?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "method": "GET",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/framework_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/vendors_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/ui-common_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/subscriptionDetails_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/pricing",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://getbandolo.com/pricing/",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://getbandolo.com/assets/index-DtvKGHYS.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/clerk-DFhMSutv.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/vendor-B2Wbu4NK.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/index-miVRWpUe.css",
+    "method": "GET",
+    "resourceType": "stylesheet"
+  },
+  {
+    "url": "https://api.getbandolo.com/ping",
+    "method": "GET",
+    "resourceType": "xhr"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/PricingPage-kSJY5Wm0.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/?_v=1788505249905",
+    "method": "GET",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/clerk.browser.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/environment?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&_method=PATCH&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "method": "POST",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/client?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "method": "GET",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/framework_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/vendors_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/ui-common_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/subscriptionDetails_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/app",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://getbandolo.com/app/",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://getbandolo.com/assets/index-DtvKGHYS.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/clerk-DFhMSutv.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/vendor-B2Wbu4NK.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/index-miVRWpUe.css",
+    "method": "GET",
+    "resourceType": "stylesheet"
+  },
+  {
+    "url": "https://api.getbandolo.com/ping",
+    "method": "GET",
+    "resourceType": "xhr"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/?_v=1788505251216",
+    "method": "GET",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/clerk.browser.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/environment?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&_method=PATCH&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "method": "POST",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/client?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "method": "GET",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/framework_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/vendors_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/ui-common_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://getbandolo.com/assets/LoginPage-cX74wYB0.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/subscriptionDetails_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/npm/@clerk/clerk-js@5.127.2/dist/signin_clerk.browser_0cc2cc_5.127.2.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://img.clerk.com/static/google.svg?width=80",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://api.getbandolo.com/api/health",
+    "method": "GET",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://api.getbandolo.com/api/tenders",
+    "method": "GET",
+    "resourceType": "fetch"
+  }
+]

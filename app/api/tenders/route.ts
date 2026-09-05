@@ -10,8 +10,12 @@
  *   source   — fonte specifica: ted | anac | cato | sintel | mepa | start_toscana |
  *              halleyweb | place_vda | intercenter | sardegna | tuttogare |
  *              lazio_stella | estar | bolzano | digitalpa | abruzzo | net4market |
- *              acquedotto_fiora | empulia | soresa | efvg
+ *              acquedotto_fiora | empulia | soresa | efvg | bandolo |
+ *              incentivi_gov | invitalia | inpa_gov | concorsipubblici | euraxess |
+ *              ted_bandolo | untalent
  *              (può essere ripetuto più volte per multi-fonte)
+ *   country  — filtro paese ISO: IT | FR | EU | US | GB | DE | ES | INTL
+ *              (agisce su Bandolo; TED e CATO/ANAC restano solo italiani)
  *
  * Fan-out per fonte:
  *   ted            → adapter TED Europa diretto (X-API-Key)
@@ -27,6 +31,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { fetchTED }  from "@/lib/sources/ted"
 import { fetchCato, fetchCatoFromDB } from "@/lib/sources/cato"
 import { fetchANAC } from "@/lib/sources/anac"
+import { fetchBandoloFromDB, BANDOLO_SOURCE_REVERSE } from "@/lib/sources/bandolo"
 import type { SourceKey, SourceResult } from "@/lib/sources/types"
 
 // Mappa fonte → valore raw del campo 'sources' di Cato (usato per il filtro client-side
@@ -115,7 +120,7 @@ async function resolveSource(
 ): Promise<SourceResult> {
   try {
     if (key === "ted") {
-      return await fetchTED(commonParams, tedKey)
+      return await fetchTED({ ...commonParams, country: commonParams.country }, tedKey)
     }
 
     if (key === "anac") {
@@ -128,6 +133,37 @@ async function resolveSource(
         pubblicazione: commonParams.pubblicazione,
         inCorso:  true,   // usa BANDI_IN_CORSO (ds 81) — già filtrati per bandi aperti
       })
+    }
+
+    // ── Bandolo: sotto-fonti individuali (incentivi_gov, invitalia, …) ──
+    if (key === "bandolo") {
+      // Meta-source: tutti i bandi Bandolo, senza filtro sotto-fonte
+      const result = await fetchBandoloFromDB({
+        q:            commonParams.q,
+        page:         commonParams.page,
+        pageSize:     commonParams.pageSize ?? 10,
+        importo:      commonParams.importo,
+        scadenza:     commonParams.scadenza,
+        pubblicazione: commonParams.pubblicazione,
+        country:      commonParams.country,
+      })
+      return result ?? { items: [], total: 0, source: "bandolo" }
+    }
+
+    const bandoloSubSource = BANDOLO_SOURCE_REVERSE[key]
+    if (bandoloSubSource !== undefined) {
+      // Sotto-fonte specifica: es. incentivi_gov → WHERE source = 'incentivi.gov.it'
+      const result = await fetchBandoloFromDB({
+        q:            commonParams.q,
+        page:         commonParams.page,
+        pageSize:     commonParams.pageSize ?? 10,
+        importo:      commonParams.importo,
+        scadenza:     commonParams.scadenza,
+        pubblicazione: commonParams.pubblicazione,
+        country:      commonParams.country,
+        subSource:    bandoloSubSource,
+      }, key)
+      return result ?? { items: [], total: 0, source: key }
     }
 
     const catoSrc = CATO_SOURCE_MAP[key]
@@ -162,16 +198,17 @@ export async function GET(request: NextRequest) {
   const scadenza = sp.get("scadenza") ?? undefined
   const pubblicazione = sp.get("pubblicazione") ?? undefined
   const cpv      = sp.get("cpv") ?? undefined
+  const country  = sp.get("country") ?? undefined
 
   // Multi-valore: ?source=ted&source=cato
   const rawSources = sp.getAll("source")
   const sources: SourceKey[] = rawSources.length > 0
     ? (rawSources as SourceKey[])
-    : ["ted", "cato"] // default: TED + Cato (aggregazione reale multi-fonte)
+    : ["ted", "cato", "bandolo"] // default: TED + Cato + Bandolo (aggregazione reale multi-fonte)
 
   const tedKey = process.env.TED_API_KEY ?? ""
 
-  const commonParams = { q, page, importo, scadenza, tipo, pubblicazione }
+  const commonParams = { q, page, importo, scadenza, tipo, pubblicazione, country }
 
   // Fan-out parallelo su tutte le fonti richieste
   const results = await Promise.all(

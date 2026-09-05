@@ -1,0 +1,139 @@
+name: "Sync All Sources (daily)"
+
+on:
+  schedule:
+    # Ogni giorno alle 05:00 UTC (07:00 ora italiana)
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Fonte da sincronizzare"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - boamp
+          - contracts-finder
+          - grants-gov
+          - ec-funding
+          - rss-feeds
+      mode:
+        description: "Modalità sync"
+        required: true
+        default: "incremental"
+        type: choice
+        options:
+          - incremental
+          - full
+
+jobs:
+  sync-boamp:
+    name: "🇫🇷 Sync BOAMP (Francia)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.source == 'all' || github.event.inputs.source == 'boamp' }}
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Sync BOAMP
+        run: |
+          if [ "${{ github.event.inputs.mode }}" = "full" ]; then
+            echo "🔄 FULL sync BOAMP..."
+            node scripts/sync-boamp.mjs --full
+          else
+            echo "🔄 Sync incrementale BOAMP (ultimi 2 giorni)..."
+            node scripts/sync-boamp.mjs --days 2
+          fi
+
+  sync-contracts-finder:
+    name: "🇬🇧 Sync Contracts Finder (UK)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.source == 'all' || github.event.inputs.source == 'contracts-finder' }}
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Sync Contracts Finder
+        run: |
+          if [ "${{ github.event.inputs.mode }}" = "full" ]; then
+            echo "🔄 FULL sync Contracts Finder (30 giorni)..."
+            node scripts/sync-contracts-finder.mjs --days 30
+          else
+            echo "🔄 Sync incrementale Contracts Finder (ultimi 2 giorni)..."
+            node scripts/sync-contracts-finder.mjs --days 2
+          fi
+
+  sync-grants-gov:
+    name: "🇺🇸 Sync Grants.gov (USA)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.source == 'all' || github.event.inputs.source == 'grants-gov' }}
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Sync Grants.gov
+        run: |
+          echo "🔄 Sync Grants.gov (tutte le opportunità posted)..."
+          node scripts/sync-grants-gov.mjs
+
+  sync-ec-funding:
+    name: "🇪🇺 Sync EU Funding Portal"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.source == 'all' || github.event.inputs.source == 'ec-funding' }}
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Sync EU Funding
+        run: |
+          echo "🔄 Sync EU Funding & Tenders Portal (Horizon Europe, LIFE, Digital Europe)..."
+          node scripts/sync-ec-funding.mjs
+
+  sync-rss-feeds:
+    name: "🇮🇹 Sync RSS Feeds (IT regionali)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.source == 'all' || github.event.inputs.source == 'rss-feeds' }}
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Sync RSS feeds
+        run: |
+          echo "🔄 Sync RSS feeds regionali italiani..."
+          node scripts/sync-rss-feeds.mjs

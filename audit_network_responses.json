@@ -1,0 +1,74 @@
+[
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/dev_browser?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2",
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"id\":\"dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm\",\"instance_id\":\"ins_39lD2GXQ3Jfm0FjNvphi1qA9GQX\",\"token\":\"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJkZXYiOiJkdmJfM0lxdzhlaXVQaWlwRHJNczAxWnJTZnhIVHptIn0.WgS4QEKcEsJuKdDwyya9XvsHWyw2klXFDUUJSuKtj9-H0C1CGJtcm9x8LWGiu54JyHieVvbV8ocyNJMMQy6YMK1dSVTa0I6n3m5R65IDjbNIVarhHCIUHRdL6QYIUYTtFCb9HIvh-FC819qZWMN7k8d2FkKCWh2mfknfKxU2IyajtW6g0fHfYJQUKy8t5rY3Rdj4PGS7yo8CriEfBbW3Knb4cXDUlvigm55C3KHG8VFMHDHNBBL1BUH6XEX0dnNN7b1dm0cp0_naPMyxldz04RqF-cIOXnNXmD-_-dMjKRVSqjvWkVrx1vyOlZcFvP7euPwZyuVI13UMdcWoMkuPMQ\",\"client_id\":null,\"created_at\":\"2026-09-04T07:00:48.575067349Z\",\"updated_at\":\"2026-09-04T07:00:48.575067349Z\",\"home_origin\":null}\n"
+  },
+  {
+    "url": "https://api.getbandolo.com/ping",
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"pong\":true}"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/environment?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&_method=PATCH&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"auth_config\":{\"object\":\"auth_config\",\"id\":\"aac_39lD2FyBMjkuykPtkZOkoueGtzf\",\"first_name\":\"on\",\"last_name\":\"on\",\"email_address\":\"on\",\"phone_number\":\"off\",\"username\":\"off\",\"password\":\"required\",\"identification_requirements\":[[\"email_address\",\"oauth_google\"],[]],\"identification_strategies\":[\"email_address\",\"oauth_google\"],\"first_factors\":[\"email_code\",\"oauth_google\",\"password\",\"reset_password_email_code\",\"ticket\"],\"second_factors\":[],\"email_address_verification_strategies\":[\"email_code\"],\"single_session_mode\":true,\"enhanced_email_deliverability\":false,\"test_mode\":true,\"cookieless_dev\":true,\"url_based_session_syncing\":true,\"claimed_at\":null,\"reverification\":true,\"native_settings\":{\"object\":\"native_settings\",\"api_enabled\":true,\"trusted_device_sign_in_enabled\":false,\"trusted_device_enrollment_prompt_after_sign_in_enabled\":false,\"trusted_device_enrollment_prompt_after_sign_up_enabled\":false}},\"display_config\":{\"object\":\"display_config\",\"id\":\"display_config_39lD2D9McD1FaNrNKoiooDhWpR5\",\"inst"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/client?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"response\":{\"object\":\"client\",\"id\":\"client_3Iqw8nsXhlPHwptqZPv5O5kKZIJ\",\"sessions\":[],\"sign_in\":null,\"sign_up\":null,\"last_active_session_id\":null,\"last_authentication_strategy\":null,\"cookie_expires_at\":null,\"captcha_bypass\":false,\"created_at\":1788505249219,\"updated_at\":1788505249219},\"client\":null}"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/client?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"response\":{\"object\":\"client\",\"id\":\"client_3Iqw8nsXhlPHwptqZPv5O5kKZIJ\",\"sessions\":[],\"sign_in\":null,\"sign_up\":null,\"last_active_session_id\":null,\"last_authentication_strategy\":null,\"cookie_expires_at\":null,\"captcha_bypass\":false,\"created_at\":1788505249219,\"updated_at\":1788505249219},\"client\":null}"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/environment?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&_method=PATCH&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"auth_config\":{\"object\":\"auth_config\",\"id\":\"aac_39lD2FyBMjkuykPtkZOkoueGtzf\",\"first_name\":\"on\",\"last_name\":\"on\",\"email_address\":\"on\",\"phone_number\":\"off\",\"username\":\"off\",\"password\":\"required\",\"identification_requirements\":[[\"email_address\",\"oauth_google\"],[]],\"identification_strategies\":[\"email_address\",\"oauth_google\"],\"first_factors\":[\"email_code\",\"oauth_google\",\"password\",\"reset_password_email_code\",\"ticket\"],\"second_factors\":[],\"email_address_verification_strategies\":[\"email_code\"],\"single_session_mode\":true,\"enhanced_email_deliverability\":false,\"test_mode\":true,\"cookieless_dev\":true,\"url_based_session_syncing\":true,\"claimed_at\":null,\"reverification\":true,\"native_settings\":{\"object\":\"native_settings\",\"api_enabled\":true,\"trusted_device_sign_in_enabled\":false,\"trusted_device_enrollment_prompt_after_sign_in_enabled\":false,\"trusted_device_enrollment_prompt_after_sign_up_enabled\":false}},\"display_config\":{\"object\":\"display_config\",\"id\":\"display_config_39lD2D9McD1FaNrNKoiooDhWpR5\",\"inst"
+  },
+  {
+    "url": "https://api.getbandolo.com/ping",
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"pong\":true}"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/client?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"response\":{\"object\":\"client\",\"id\":\"client_3Iqw8nsXhlPHwptqZPv5O5kKZIJ\",\"sessions\":[],\"sign_in\":null,\"sign_up\":null,\"last_active_session_id\":null,\"last_authentication_strategy\":null,\"cookie_expires_at\":null,\"captcha_bypass\":false,\"created_at\":1788505249219,\"updated_at\":1788505249219},\"client\":null}"
+  },
+  {
+    "url": "https://inviting-lobster-60.clerk.accounts.dev/v1/environment?__clerk_api_version=2025-11-10&_clerk_js_version=5.127.2&_method=PATCH&__clerk_db_jwt=dvb_3Iqw8eiuPiipDrMs01ZrSfxHTzm",
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"auth_config\":{\"object\":\"auth_config\",\"id\":\"aac_39lD2FyBMjkuykPtkZOkoueGtzf\",\"first_name\":\"on\",\"last_name\":\"on\",\"email_address\":\"on\",\"phone_number\":\"off\",\"username\":\"off\",\"password\":\"required\",\"identification_requirements\":[[\"email_address\",\"oauth_google\"],[]],\"identification_strategies\":[\"email_address\",\"oauth_google\"],\"first_factors\":[\"email_code\",\"oauth_google\",\"password\",\"reset_password_email_code\",\"ticket\"],\"second_factors\":[],\"email_address_verification_strategies\":[\"email_code\"],\"single_session_mode\":true,\"enhanced_email_deliverability\":false,\"test_mode\":true,\"cookieless_dev\":true,\"url_based_session_syncing\":true,\"claimed_at\":null,\"reverification\":true,\"native_settings\":{\"object\":\"native_settings\",\"api_enabled\":true,\"trusted_device_sign_in_enabled\":false,\"trusted_device_enrollment_prompt_after_sign_in_enabled\":false,\"trusted_device_enrollment_prompt_after_sign_up_enabled\":false}},\"display_config\":{\"object\":\"display_config\",\"id\":\"display_config_39lD2D9McD1FaNrNKoiooDhWpR5\",\"inst"
+  },
+  {
+    "url": "https://api.getbandolo.com/ping",
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"pong\":true}"
+  },
+  {
+    "url": "https://api.getbandolo.com/api/health",
+    "status": 404,
+    "contentType": "application/json",
+    "body": "{\"detail\":\"Not Found\"}"
+  },
+  {
+    "url": "https://api.getbandolo.com/api/tenders",
+    "status": 401,
+    "contentType": "application/json",
+    "body": "{\"detail\":\"Autenticazione richiesta.\"}"
+  }
+]
