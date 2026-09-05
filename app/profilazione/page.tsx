@@ -301,7 +301,7 @@ export default function ProfilazionePage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              cpv_codes: data.profile.cpv_codes.map((c: CpvEntry) => c.description),
+              cpv_codes: data.profile.cpv_codes.map((c: CpvEntry) => c.code),
               provincia: data.profile.province[0]?.name,
               limit: 20,
             }),

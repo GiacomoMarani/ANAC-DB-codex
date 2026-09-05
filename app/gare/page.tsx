@@ -12,7 +12,8 @@ export const metadata = {
 const SOURCES = [
   { label: "ANAC", sublabel: "Bandi in corso" },
   { label: "TED", sublabel: "Europa" },
-  { label: "18+", sublabel: "Fonti regionali" },
+  { label: "🇫🇷 🇬🇧 🇺🇸", sublabel: "BOAMP · CF · Grants" },
+  { label: "30+", sublabel: "Fonti regionali" },
 ] as const
 
 export default function GarePage() {
@@ -49,9 +50,10 @@ export default function GarePage() {
 
               <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-[52ch]">
                 Migliaia di bandi da{" "}
-                <span className="text-foreground font-semibold">ANAC</span>{" "}
-                e{" "}
-                <span className="text-foreground font-semibold">TED Europa</span>.
+                <span className="text-foreground font-semibold">ANAC</span>,{" "}
+                <span className="text-foreground font-semibold">TED Europa</span>,{" "}
+                <span className="text-foreground font-semibold">BOAMP</span>,{" "}
+                <span className="text-foreground font-semibold">Grants.gov</span> e altre fonti.
                 Filtra, analizza, esporta.
               </p>
             </div>
@@ -128,6 +130,33 @@ export default function GarePage() {
                 className="text-primary hover:underline underline-offset-2"
               >
                 TED Europa
+              </a>
+              {" · "}
+              <a
+                href="https://boamp.fr"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline underline-offset-2"
+              >
+                BOAMP
+              </a>
+              {" · "}
+              <a
+                href="https://www.grants.gov"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline underline-offset-2"
+              >
+                Grants.gov
+              </a>
+              {" · "}
+              <a
+                href="https://www.contractsfinder.service.gov.uk"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline underline-offset-2"
+              >
+                Contracts Finder
               </a>
             </p>
             <span className="text-[10px] text-muted-foreground/50 tracking-[0.12em] uppercase">

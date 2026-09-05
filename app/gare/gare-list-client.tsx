@@ -42,6 +42,7 @@ interface TenderItem {
   sources:             string
   link_originale:      string | null
   stazione_appaltante: string | null
+  country?:            string | null
 }
 
 interface TendersResponse {
@@ -56,12 +57,17 @@ const ALL_SOURCES: { value: SourceKey | "all"; label: string; flag?: string }[] 
   { value: "all",          label: "Tutte le fonti" },
   { value: "anac",         label: "ANAC (Bandi in corso)", flag: "🏛️" },
   { value: "ted",          label: "TED Europa",             flag: "🇪🇺" },
+  // Fonti dirette internazionali
+  { value: "boamp",            label: "BOAMP (Francia)",          flag: "🇫🇷" },
+  { value: "contracts_finder", label: "Contracts Finder (UK)",    flag: "🇬🇧" },
+  { value: "grants_gov",       label: "Grants.gov (USA)",         flag: "🇺🇸" },
+  { value: "ec_funding",       label: "EU Funding Portal",        flag: "🇪🇺" },
+  // Sotto-fonti CATO (piattaforme regionali italiane)
   { value: "sintel",       label: "Sintel",                 flag: "📡" },
   { value: "mepa",         label: "MePA",                   flag: "📡" },
   { value: "start_toscana", label: "Start Toscana",         flag: "📡" },
   { value: "halleyweb",    label: "Halley Web",             flag: "📡" },
   { value: "place_vda",    label: "Valle d'Aosta",          flag: "📡" },
-  // Sotto-fonti CATO scoperte via analisi diretta dell'API (devtools su get-cato.com/gare)
   { value: "intercenter",      label: "Intercenter",              flag: "📡" },
   { value: "sardegna",         label: "Sardegna CAT",              flag: "📡" },
   { value: "tuttogare",        label: "TuttoGare",                 flag: "📡" },
@@ -204,7 +210,7 @@ class QuotaError extends Error {
   }
 }
 
-const GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"] as const
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"] as const
 
 interface GeminiResult {
   text: string
@@ -1096,6 +1102,7 @@ function getLotti(cig: CigLotto[] | string | null): CigLotto[] {
 }
 
 function TenderCard({ tender }: { tender: TenderItem }) {
+  const searchQuery = useContext(SearchQueryContext)
   const days     = daysUntil(tender.data_scadenza)
   const isActive = tender.stato === "active" || (days !== null && days > 0) || tender.sources === "anac"
   const isNew    = isPublishedWithinHours(tender.data_pubblicazione, 48)
@@ -1106,10 +1113,22 @@ function TenderCard({ tender }: { tender: TenderItem }) {
   const sourceUrl = tender.link_originale ?? (
     src === "ted"
       ? `https://ted.europa.eu/it/notice/-/detail/${cigCode}`
-      : `https://www.get-cato.com/gara/${tender.id}`
+      : src === "boamp" || src === "contracts_finder" || src === "grants_gov" || src === "ec_funding"
+        ? undefined  // no fallback link for international sources without link_originale
+        : `https://www.get-cato.com/gara/${tender.id}`
   )
 
   const cpvCodes = tender.descrizione_cpv ?? tender.tipo_contratto
+
+  // Country flag emoji lookup
+  const COUNTRY_FLAGS: Record<string, string> = {
+    IT: "🇮🇹", FR: "🇫🇷", US: "🇺🇸", GB: "🇬🇧", EU: "🇪🇺", DE: "🇩🇪", ES: "🇪🇸",
+    NL: "🇳🇱", BE: "🇧🇪", AT: "🇦🇹", PT: "🇵🇹", PL: "🇵🇱", SE: "🇸🇪", DK: "🇩🇰",
+    FI: "🇫🇮", IE: "🇮🇪", GR: "🇬🇷", CZ: "🇨🇿", RO: "🇷🇴", HU: "🇭🇺", LU: "🇱🇺",
+    CA: "🇨🇦", CH: "🇨🇭", NO: "🇳🇴",
+  }
+  const countryCode = tender.country?.toUpperCase()
+  const countryFlag = countryCode ? COUNTRY_FLAGS[countryCode] ?? null : null
 
   return (
     <div
@@ -1131,6 +1150,13 @@ function TenderCard({ tender }: { tender: TenderItem }) {
             ● ATTIVA
           </Badge>
         )}
+        {/* Badge paese */}
+        {countryCode && countryCode !== "IT" && (
+          <Badge variant="outline" className="text-xs font-medium px-2 py-0.5">
+            {countryFlag && <span className="mr-1">{countryFlag}</span>}
+            {countryCode}
+          </Badge>
+        )}
         {/* Badge fonte colorato */}
         <SourceBadge source={tender.sources} />
         {cpvCodes && (
@@ -1149,7 +1175,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
       {/* Title */}
       <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="block group">
         <h2 className="text-base font-semibold leading-snug group-hover:text-primary transition-colors">
-          <HighlightText text={tender.oggetto || "—"} query={useContext(SearchQueryContext)} />
+          <HighlightText text={tender.oggetto || "—"} query={searchQuery} />
         </h2>
       </a>
 

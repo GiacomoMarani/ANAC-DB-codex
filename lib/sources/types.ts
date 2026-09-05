@@ -78,7 +78,6 @@ export type SourceKey =
   | "contracta"
   | "traspare"
   | "aulss4veneto"
-  | "estar"
   | "infoplus"
   | "aslroma1"
   | "appaltiitalia"

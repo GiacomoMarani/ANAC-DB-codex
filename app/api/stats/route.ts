@@ -7,7 +7,7 @@ export async function GET() {
   // Use parallel queries for stats - these are simple counts that use indexes
   const [totalResult, activeResult, anniResult, cpvResult] = await Promise.all([
     supabase.from("cig").select("*", { count: "exact", head: true }),
-    supabase.from("cig").select("*", { count: "exact", head: true }).eq("stato", "ATTIVO"),
+    supabase.from("cig").select("*", { count: "exact", head: true }).in("stato", ["active", "ATTIVO"]),
     supabase.from("cig").select("data_pubblicazione").not("data_pubblicazione", "is", null).order("data_pubblicazione", { ascending: false }).limit(500),
     supabase.from("cig").select("descrizione_cpv").not("descrizione_cpv", "is", null).order("descrizione_cpv", { ascending: true }).limit(1000),
   ])

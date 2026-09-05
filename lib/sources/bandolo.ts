@@ -153,7 +153,7 @@ export async function fetchBandoloFromDB(
     query = query.eq("country", country.toUpperCase())
   }
 
-  // Full-text search (Italian)
+  // Full-text search (multilingual: simple tokenizer)
   if (q?.trim()) {
     query = query.textSearch("fts", q.trim(), { type: "plain", config: "simple" })
   }
