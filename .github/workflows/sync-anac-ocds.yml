@@ -1,0 +1,58 @@
+name: "ANAC OCDS Bulk Sync (daily)"
+
+on:
+  schedule:
+    # Ogni giorno alle 03:00 UTC (05:00 ora italiana)
+    # Complementare al Vercel Cron (stesso orario) — il Vercel Cron
+    # ha limiti di timeout (50s/300s), questa Action processa senza limiti
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      months:
+        description: "Numero di mesi da sincronizzare"
+        required: true
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
+      month:
+        description: "Mese specifico (YYYY-MM), sovrascrive 'months'"
+        required: false
+        type: string
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+jobs:
+  sync:
+    name: "Sync ANAC OCDS Bulk → cig + aggiudicatari"
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # max 6h per file bulk ~748 MB
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run ANAC OCDS sync
+        run: |
+          if [ -n "${{ github.event.inputs.month }}" ]; then
+            echo "🔄 Sync mese specifico: ${{ github.event.inputs.month }}"
+            node scripts/sync-anac-ocds.mjs --month "${{ github.event.inputs.month }}"
+          elif [ -n "${{ github.event.inputs.months }}" ]; then
+            echo "🔄 Sync ultimi ${{ github.event.inputs.months }} mesi"
+            node scripts/sync-anac-ocds.mjs --months "${{ github.event.inputs.months }}"
+          else
+            echo "🔄 Sync ultimo mese disponibile (cron)"
+            node scripts/sync-anac-ocds.mjs --months 1
+          fi
