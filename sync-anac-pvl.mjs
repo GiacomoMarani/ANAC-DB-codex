@@ -336,8 +336,17 @@ async function main() {
   // 4. Chiudi i bandi scaduti
   console.log("\n[4] Pulizia bandi scaduti...");
 
-  if (allCigs.size === 0) {
-    console.log("  [!] Nessun bando scaricato -- pulizia SALTATA per sicurezza.");
+  if (allCigs.size === 0 || MAX_CIGS < Infinity || SEARCH_QUERY) {
+    console.log("  [!] Sync parziale o nessun bando scaricato -- pulizia globale SALTATA per sicurezza.");
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const { error: expErr } = await supabase
+      .from("cig")
+      .update({ stato: "closed" })
+      .eq("stato", "active")
+      .lt("data_scadenza_offerta", todayStr);
+    if (!expErr) {
+      console.log("  Pulizia bandi con data_scadenza_offerta passata eseguita.");
+    }
   } else {
     let allActive = [];
     let from = 0;

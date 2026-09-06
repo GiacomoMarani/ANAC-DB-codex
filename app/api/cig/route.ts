@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
       anac_id_avviso,
       esito
     `, { count: "exact" })
+    .order("data_pubblicazione", { ascending: false })
     .order("id", { ascending: false })
     .range(offset, offset + pageSize - 1)
 

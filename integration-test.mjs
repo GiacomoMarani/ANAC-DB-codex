@@ -364,7 +364,18 @@ await testApi("/api/stats", "GET /api/stats", (body) => {
 
 await testApi("/api/cig?page=1", "GET /api/cig", (body) => {
   if (Array.isArray(body.data) && typeof body.count === "number") {
-    pass("GET /api/cig", `count=${body.count}, page_rows=${body.data.length}, totalPages=${body.totalPages}`);
+    const isSorted = body.data.every((item, i, arr) => {
+      if (i === 0) return true;
+      const prev = arr[i - 1].data_pubblicazione;
+      const curr = item.data_pubblicazione;
+      if (!prev || !curr) return true;
+      return prev >= curr;
+    });
+    if (isSorted) {
+      pass("GET /api/cig", `count=${body.count}, page_rows=${body.data.length}, sorted_recent_first=true`);
+    } else {
+      fail("GET /api/cig", `Items are not in descending order of publication date`);
+    }
   } else {
     fail("GET /api/cig", `Unexpected shape: ${JSON.stringify(body).substring(0, 200)}`);
   }

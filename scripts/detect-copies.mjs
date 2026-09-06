@@ -134,6 +134,7 @@ async function main() {
       console.log(`   - https://github.com/${repo}`)
     }
     console.log("\n   Azione: verifica se rispettano la AGPL-3.0 (sorgente pubblico, attribuzione).")
+    process.exitCode = 1
   }
 
   console.log(`\n📊 Fork totali: ${forks.length}`)

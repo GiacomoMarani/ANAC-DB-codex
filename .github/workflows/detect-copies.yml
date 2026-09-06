@@ -1,0 +1,44 @@
+# Workflow YAML — niente header copyright (file di configurazione CI)
+name: 🔍 Detect Copies
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'        # Ogni lunedì alle 09:00 UTC
+  workflow_dispatch: {}          # Lancio manuale da Actions
+
+jobs:
+  detect-copies:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Esegui detect-copies
+        id: detect
+        continue-on-error: true
+        run: |
+          node scripts/detect-copies.mjs 2>&1 | tee /tmp/detect-output.txt
+          # Salva output anche nel Job Summary di GitHub Actions
+          cat /tmp/detect-output.txt >> $GITHUB_STEP_SUMMARY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notifica — apri issue se copie trovate
+        if: steps.detect.outcome == 'failure'
+        run: |
+          # Crea issue solo se ci sono effettivamente copie (non errori di rete)
+          if grep -q "🚨" /tmp/detect-output.txt; then
+            gh issue create \
+              --title "🚨 Copie non autorizzate rilevate — $(date -I)" \
+              --body "$(cat /tmp/detect-output.txt)" \
+              --assignee GiacomoMarani
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

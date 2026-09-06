@@ -783,7 +783,19 @@ export function GareListClient() {
   // ── Dati unificati ─────────────────────────────────────────────────────────
   // In modalità "all": merge ANAC + TED/ITA con ordinamento per scadenza
   const items: TenderItem[] = useMemo(() => {
-    if (isAnacMode) return anacItems
+    if (isAnacMode) {
+      return [...anacItems].sort((a, b) => {
+        const da = a.data_pubblicazione ?? ""
+        const db = b.data_pubblicazione ?? ""
+        if (da && db) {
+          const cmp = db.localeCompare(da)
+          if (cmp !== 0) return cmp
+        } else if (da !== db) {
+          return da ? -1 : 1
+        }
+        return 0
+      })
+    }
     if (!isAllMode) return data?.items || []
     // All mode: merge ANAC + TED/ITA
     const tedItaItems = data?.items || []

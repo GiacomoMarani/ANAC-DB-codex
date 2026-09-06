@@ -200,9 +200,10 @@ async function syncAnacPVL(maxPages = Infinity) {
     else totalUpserted += batch.length
   }
 
-  // Mark stale as closed (safety: skip if nothing downloaded)
+  // Mark stale as closed (safety: only full scan when all pages were fetched can mark missing CIGs as closed)
   let staleClosed = 0
-  if (allCigs.size > 0) {
+  const isFullScan = totalPages >= (firstPage.totalPages || 0)
+  if (isFullScan && allCigs.size > 0) {
     let allActive: { cig: string }[] = []
     let from = 0
     while (true) {
@@ -221,6 +222,14 @@ async function syncAnacPVL(maxPages = Infinity) {
       await supabase.from("cig").update({ stato: "closed" }).in("cig", stale.slice(i, i + 100))
     }
     staleClosed = stale.length
+  } else {
+    // In partial/incremental scan: close only tenders whose deadline has already passed
+    const { count } = await supabase
+      .from("cig")
+      .update({ stato: "closed" }, { count: "exact" })
+      .eq("stato", "active")
+      .lt("data_scadenza_offerta", today)
+    staleClosed = count ?? 0
   }
 
   return {
