@@ -8,7 +8,8 @@
     "lint": "eslint .",
     "start": "next start",
     "sync:ita": "node scripts/sync-ita.mjs",
-    "sync:ita:full": "node scripts/sync-ita.mjs --full",`n    "detect-copies": "node scripts/detect-copies.mjs": "node scripts/sync-ita.mjs --full"
+    "sync:ita:full": "node scripts/sync-ita.mjs --full",
+    "detect-copies": "node scripts/detect-copies.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

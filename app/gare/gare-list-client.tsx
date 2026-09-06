@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (c) 2024-2026 Giacomo Marani <ing.giacomo.marani@gmail.com>
-// Project: ANAC-DB-codex — https://github.com/GiacomoMarani/ANAC-DB-codex
+// Project: ANAC-DB-codex ï¿½ https://github.com/GiacomoMarani/ANAC-DB-codex
 // Watermark: GM-ANAC-7f3a9c2e-4b1d-4e8f-a5c3-2d9f0e1b6a4d
 "use client"
 
@@ -1142,12 +1142,16 @@ function TenderCard({ tender }: { tender: TenderItem }) {
   const sourceUrl = tender.link_originale ?? (
     src === "ted"
       ? `https://ted.europa.eu/it/notice/-/detail/${cigCode}`
-      : src === "boamp" || src === "contracts_finder" || src === "grants_gov" || src === "ec_funding"
-        ? undefined  // no fallback link for international sources without link_originale
-        : `https://www.get-cato.com/gara/${tender.id}`
+      : undefined  // no fallback link for ITA/ANAC/international sources without link_originale
   )
 
-  const cpvCodes = tender.descrizione_cpv || null
+  // Only show CPV badge if value contains digits (real CPV code like "45000000-7")
+  // Old ANAC Superset sync stored text labels â€” these are NOT valid CPV codes
+  const cpvCodes = (() => {
+    const raw = tender.descrizione_cpv
+    if (!raw) return null
+    return /\d/.test(raw) ? raw : null
+  })()
 
   // Country flag emoji lookup
   const COUNTRY_FLAGS: Record<string, string> = {

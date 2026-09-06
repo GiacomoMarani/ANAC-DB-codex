@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (c) 2024-2026 Giacomo Marani <ing.giacomo.marani@gmail.com>
-// Project: ANAC-DB-codex � https://github.com/GiacomoMarani/ANAC-DB-codex
+// Project: ANAC-DB-codex — https://github.com/GiacomoMarani/ANAC-DB-codex
 // Watermark: GM-ANAC-7f3a9c2e-4b1d-4e8f-a5c3-2d9f0e1b6a4d
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
@@ -134,6 +134,12 @@ async function fetchPVLPage(page: number): Promise<{ content: unknown[]; totalEl
   throw new Error("Unreachable")
 }
 
+function isStillBiddable(rec: PVLRecord, today: string): boolean {
+  if (!rec.dataScadenza) return true
+  const deadline = rec.dataScadenza.split("T")[0]
+  return deadline >= today
+}
+
 // ── Main sync logic ─────────────────────────────────────────────────────────
 
 async function syncAnacPVL(maxPages = Infinity) {
@@ -142,6 +148,7 @@ async function syncAnacPVL(maxPages = Infinity) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
+  const today = new Date().toISOString().split("T")[0]
   const firstPage = await fetchPVLPage(0)
   const totalPages = Math.min(firstPage.totalPages || 0, maxPages)
   const totalAvvisi = firstPage.totalElements || 0
@@ -154,7 +161,7 @@ async function syncAnacPVL(maxPages = Infinity) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const avviso of (firstPage.content || []) as any[]) {
     for (const rec of extractFromPVL(avviso)) {
-      if (!allCigs.has(rec.cig)) {
+      if (!allCigs.has(rec.cig) && isStillBiddable(rec, today)) {
         allCigs.add(rec.cig)
         allRecords.push(mapToSupabase(rec))
       }
@@ -168,7 +175,7 @@ async function syncAnacPVL(maxPages = Infinity) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const avviso of (data.content || []) as any[]) {
         for (const rec of extractFromPVL(avviso)) {
-          if (!allCigs.has(rec.cig)) {
+          if (!allCigs.has(rec.cig) && isStillBiddable(rec, today)) {
             allCigs.add(rec.cig)
             allRecords.push(mapToSupabase(rec))
           }

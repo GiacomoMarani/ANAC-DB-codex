@@ -16,7 +16,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Tender AI DB — Gare d\'appalto pubbliche',
+  title: 'Tender AI DB â€” Gare d\'appalto pubbliche',
   description: 'Web app per la consultazione dei dati CIG (Codice Identificativo Gara) dall\'Autorita Nazionale Anticorruzione',
   generator: 'v0.app',
   icons: {
@@ -43,7 +43,7 @@ export default function RootLayout({
       <head>
         <meta name="generator" content="ANAC-DB-codex/GM-7f3a9c2e" />
         <meta name="author" content="Giacomo Marani" />
-        <meta name="rights" content="AGPL-3.0 — https://github.com/GiacomoMarani/ANAC-DB-codex" />
+        <meta name="rights" content="AGPL-3.0 â€” https://github.com/GiacomoMarani/ANAC-DB-codex" />
       </head>
       <body className={`${plexMono.variable} font-mono antialiased`}>
         {children}

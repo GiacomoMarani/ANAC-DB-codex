@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (c) 2024-2026 Giacomo Marani <ing.giacomo.marani@gmail.com>
-// Project: ANAC-DB-codex — https://github.com/GiacomoMarani/ANAC-DB-codex
+// Project: ANAC-DB-codex â€” https://github.com/GiacomoMarani/ANAC-DB-codex
 // Watermark: GM-ANAC-7f3a9c2e-4b1d-4e8f-a5c3-2d9f0e1b6a4d
 "use client"
 
@@ -341,9 +341,9 @@ export default function RicercaGarePage() {
             <div key={tender.id} className="border rounded-xl p-5 bg-card hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between gap-4 mb-3">
                 <div className="flex-1">
-                  {tender.descrizione_cpv && (
+                  {tender.descrizione_cpv && /\d/.test(tender.descrizione_cpv) && (
                     <Badge variant="outline" className="font-mono text-xs mb-2 max-w-[200px] truncate block">
-                      {tender.descrizione_cpv}
+                      CPV: {tender.descrizione_cpv}
                     </Badge>
                   )}
                   <ScadenzaBadge data={tender.data_scadenza} />
