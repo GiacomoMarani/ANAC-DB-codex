@@ -1,0 +1,45 @@
+name: "ANAC PVL Sync (every 6h)"
+
+on:
+  schedule:
+    # Ogni 6 ore (00:00, 06:00, 12:00, 18:00 UTC)
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Limit number of CIGs to sync (empty for full sync)"
+        required: false
+        default: ""
+        type: string
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+jobs:
+  sync:
+    name: "Sync ANAC bandi attivi (PVL API)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run ANAC PVL sync
+        run: |
+          if [ -n "${{ github.event.inputs.limit }}" ]; then
+            echo "🔄 Running sync with limit ${{ github.event.inputs.limit }}..."
+            node sync-anac-pvl.mjs --limit ${{ github.event.inputs.limit }}
+          else
+            echo "🔄 Running FULL sync..."
+            node sync-anac-pvl.mjs
+          fi

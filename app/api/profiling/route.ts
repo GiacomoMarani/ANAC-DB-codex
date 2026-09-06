@@ -1,6 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2024-2026 Giacomo Marani <ing.giacomo.marani@gmail.it>
+// Project: ANAC-DB-codex � https://github.com/GiacomoMarani/ANAC-DB-codex
+// Watermark: GM-ANAC-7f3a9c2e-4b1d-4e8f-a5c3-2d9f0e1b6a4d
 import { NextResponse } from "next/server"
 import { isValidPartitaIva, formatPartitaIva } from "@/lib/utils/piva"
 import { lookupVies } from "@/lib/utils/vies"
+import { lookupScpMit, type ScpAggiudicazione } from "@/lib/services/scpMit"
 import type { ProfilingResponse } from "@/lib/utils/piva"
 
 /**
@@ -57,25 +62,70 @@ export async function POST(req: Request) {
       )
     }
 
-    // ── VIES + aggiudicatari + CIG in parallelo ────────────────────
+    // ── VIES + aggiudicatari (DB locale) + SCP/MIT (live) ────────────
     // 1. VIES (EU Commission, gratuito) → ragione sociale e indirizzo reali
     // 2. aggiudicatari (tabella locale) → gare vinte reali per questa P.IVA
-    // 3. cig (fallback) → campione generico se non ci sono aggiudicatari
+    // 3. SCP/MIT (live) → fallback se la tabella locale è vuota/inesistente
 
-    const [viesResult, aggiudicatariResult] = await Promise.all([
-      lookupVies(piva),
-      supabase
+    // Avvia VIES in parallelo (è indipendente)
+    const viesPromise = lookupVies(piva)
+
+    // Prova prima la tabella locale (se esiste)
+    let localData: Array<{
+      codice_fiscale: string
+      denominazione: string | null
+      cig: string
+      importo_aggiudicazione: number | null
+      data_aggiudicazione: string | null
+      codice_cpv: string | null
+      descrizione_cpv: string | null
+      oggetto_gara: string | null
+      provincia: string | null
+      ruolo: string | null
+    }> = []
+
+    try {
+      const { data } = await supabase
         .from("aggiudicatari")
         .select("codice_fiscale, denominazione, cig, importo_aggiudicazione, data_aggiudicazione, codice_cpv, descrizione_cpv, oggetto_gara, provincia, ruolo")
         .eq("codice_fiscale", piva)
         .order("data_aggiudicazione", { ascending: false })
-        .limit(500),
-    ])
+        .limit(500)
+      if (data && data.length > 0) localData = data
+    } catch {
+      // Tabella potrebbe non esistere — ignora
+    }
 
-    const { data: aggiudicatariData } = aggiudicatariResult
+    // Se la tabella locale è vuota, query live SCP/MIT
+    let scpData: ScpAggiudicazione[] = []
+    let dataSource: "local" | "scp_mit" = "local"
 
-    // Se abbiamo dati reali dall'aggiudicatari table, usiamo quelli
-    const hasRealData = aggiudicatariData && aggiudicatariData.length > 0
+    if (localData.length === 0) {
+      const scpResult = await lookupScpMit(piva)
+      scpData = scpResult.records
+      dataSource = "scp_mit"
+    }
+
+    // Attendi VIES
+    const viesResult = await viesPromise
+
+    // Unifica: usa dati locali se disponibili, altrimenti SCP/MIT
+    const aggiudicatariData = localData.length > 0
+      ? localData
+      : scpData.map((r) => ({
+          codice_fiscale: r.codice_fiscale,
+          denominazione: r.denominazione,
+          cig: r.cig,
+          importo_aggiudicazione: r.importo_aggiudicazione,
+          data_aggiudicazione: r.data_aggiudicazione,
+          codice_cpv: r.codice_cpv,
+          descrizione_cpv: r.descrizione_cpv,
+          oggetto_gara: r.oggetto_gara,
+          provincia: r.provincia,
+          ruolo: r.ruolo,
+        }))
+
+    const hasRealData = aggiudicatariData.length > 0
 
     // ── Inizializza profilo con dati VIES reali ────────────────────
     const profile: ProfilingResponse["profile"] = {
@@ -100,10 +150,11 @@ export async function POST(req: Request) {
       profile.ragione_sociale = aggiudicatariData[0].denominazione
     }
 
-    // ── PATH A: Dati reali da aggiudicatari ─────────────────────────
+    // ── PATH A: Dati reali da aggiudicatari (locale o SCP/MIT) ──────
     if (hasRealData) {
       const cpvMap = new Map<string, { code: string; description: string; count: number; total_value: number }>()
       const provMap = new Map<string, number>()
+      const tipiMap = new Map<string, number>()
       const dates: number[] = []
       let importoTotale = 0
 
@@ -119,6 +170,13 @@ export async function POST(req: Request) {
         if (row.provincia && row.provincia.trim()) {
           const p = row.provincia.trim().toUpperCase()
           provMap.set(p, (provMap.get(p) || 0) + 1)
+        }
+
+        // Tipo contratto (da SCP/MIT abbiamo tipo_appalto nel campo ruolo extra)
+        const tipoAppalto = (row as { tipo_appalto?: string | null }).tipo_appalto
+        if (tipoAppalto) {
+          const tipo = normalizeContractType(tipoAppalto)
+          if (tipo) tipiMap.set(tipo, (tipiMap.get(tipo) || 0) + 1)
         }
 
         // CPV reale dall'aggiudicazione
@@ -186,10 +244,20 @@ export async function POST(req: Request) {
         .sort((a, b) => b.count - a.count)
         .slice(0, 10)
 
-      // Tipi contratto: non disponibili negli aggiudicatari, lasciamo vuoto
-      // (saranno disponibili quando faremo join con cig)
+      // Tipi contratto
+      profile.tipi_contratto = [...tipiMap.entries()]
+        .map(([tipo, count]) => ({
+          tipo,
+          count,
+          percentage: totalGare > 0 ? Math.round((count / totalGare) * 100) : 0,
+        }))
+        .sort((a, b) => b.count - a.count)
 
-      return NextResponse.json({ profile })
+      return NextResponse.json({
+        profile,
+        dataSource,
+        ...(dataSource === "scp_mit" ? { scpMitTotal: scpData.length } : {}),
+      })
     }
 
     // ── P.IVA non trovata: restituisci profilo vuoto con dati VIES ──
@@ -197,7 +265,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       profile,
       foundInRegistry: false,
-      message: "Nessuna aggiudicazione trovata nel database ANAC per questa Partita IVA.",
+      dataSource: "none",
+      message: "Nessuna aggiudicazione trovata nel database ANAC né nella banca dati SCP/MIT per questa Partita IVA.",
     })
   } catch (err) {
     console.error("[profiling] Unhandled error:", err)

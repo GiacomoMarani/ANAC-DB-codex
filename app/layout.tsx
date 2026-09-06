@@ -1,4 +1,9 @@
+﻿// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2024-2026 Giacomo Marani <ing.giacomo.marani@gmail.it>
+// Project: ANAC-DB-codex � https://github.com/GiacomoMarani/ANAC-DB-codex
+// Watermark: GM-ANAC-7f3a9c2e-4b1d-4e8f-a5c3-2d9f0e1b6a4d
 import React from "react"
+import { telemetryPing } from "@/lib/telemetry"
 import type { Metadata } from 'next'
 import { IBM_Plex_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
@@ -25,6 +30,9 @@ export const metadata: Metadata = {
   },
 }
 
+// Telemetry: rileva deploy non autorizzati
+if (typeof globalThis !== 'undefined') telemetryPing()
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -32,6 +40,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it">
+      <head>
+        <meta name="generator" content="ANAC-DB-codex/GM-7f3a9c2e" />
+        <meta name="author" content="Giacomo Marani" />
+        <meta name="rights" content="AGPL-3.0 — https://github.com/GiacomoMarani/ANAC-DB-codex" />
+      </head>
       <body className={`${plexMono.variable} font-mono antialiased`}>
         {children}
         <Analytics />
