@@ -825,10 +825,15 @@ export function GareListClient() {
   }, [isAnacMode, isAllMode, anacItems, data?.items, scadenza])
 
   const isLoading = isAnacMode ? anacLoading : isAllMode ? (swrLoading || anacLoading) : swrLoading
-  const pageSize  = isAnacMode ? 20 : 10
-  // In all-mode: items are merged client-side, so use merged items count as total
-  // In single-source mode: use server-side total for proper pagination
-  const total     = isAnacMode ? (anacData?.count ?? 0) : isAllMode ? items.length : (data?.total ?? 0)
+  // In all-mode: each API returns ~10 items per page (TED 10, Cato 10, Bandolo 10) + ANAC 20
+  // Use server-side totals for the count, since pagination works server-side per source
+  const allModePageSize = 30  // TED(10) + Cato(10) + Bandolo(10) per page from /api/tenders
+  const pageSize  = isAnacMode ? 20 : isAllMode ? allModePageSize : 10
+  const total     = isAnacMode
+    ? (anacData?.count ?? 0)
+    : isAllMode
+      ? ((data?.total ?? 0) + (anacData?.count ?? 0))
+      : (data?.total ?? 0)
   const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0
 
   const resetFilters = useCallback(() => {
@@ -1065,8 +1070,7 @@ export function GareListClient() {
 
       <SearchQueryContext.Provider value={deferredSearch}>
       <div className="space-y-4">
-        {/* BUG 1 FIX: In all-mode use client-side pagination on merged items */}
-        {(isAllMode ? items.slice(page * pageSize, (page + 1) * pageSize) : items).map(tender => (
+        {items.map(tender => (
           <TenderCard key={tender.id} tender={tender} />
         ))}
       </div>
