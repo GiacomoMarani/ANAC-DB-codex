@@ -413,13 +413,24 @@ async function main() {
       }
     } // end else (allCigs.size > 0)
 
-    // 7. Riepilogo
+    // 7. Cleanup: elimina fisicamente bandi scaduti
+    const todayGC = new Date().toISOString().split("T")[0];
+    console.log("\n🗑 Cleanup: eliminazione CIG scaduti...");
+    const { count: cigDel } = await supabase
+      .from("cig")
+      .delete({ count: "exact" })
+      .lt("data_scadenza_offerta", todayGC)
+      .not("data_scadenza_offerta", "is", null);
+    console.log(`  ✅ CIG eliminati: ${cigDel ?? 0}`);
+
+    // 8. Riepilogo
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log("\n" + "═".repeat(70));
     console.log("  ✅ SINCRONIZZAZIONE COMPLETATA");
     console.log("═".repeat(70));
     console.log(`  📥 Scaricati da ANAC:    ${totalFetched}`);
     console.log(`  💾 Aggiornati Supabase:  ${totalUpserted}`);
+    console.log(`  🗑️  Cleanup CIG:          ${cigDel ?? 0} eliminati`);
     console.log(`  ⏱️  Tempo totale:         ${elapsed}s`);
     console.log("═".repeat(70));
   } catch (err) {

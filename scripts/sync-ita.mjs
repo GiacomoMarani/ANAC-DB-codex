@@ -350,6 +350,20 @@ async function main() {
   // Save state
   saveState({ lastPage: currentPage, lastRun: new Date().toISOString() });
 
+  // ── Cleanup: elimina bandi scaduti da ita_tenders ──────────────────────────
+  if (!IS_DRY_RUN) {
+    const todayGC = new Date().toISOString().split("T")[0];
+    log("");
+    log("🗑 Cleanup: eliminazione ita_tenders scaduti...");
+    const { count } = await supabase
+      .from("ita_tenders")
+      .delete({ count: "exact" })
+      .lt("data_scadenza", todayGC)
+      .not("data_scadenza", "is", null);
+    stats.cleaned = count ?? 0;
+    log(`  ✅ Eliminati: ${stats.cleaned}`);
+  }
+
   printStats(stats, startTime);
 }
 
