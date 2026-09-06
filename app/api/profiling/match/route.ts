@@ -74,33 +74,50 @@ export async function POST(req: Request) {
         .filter(Boolean) as string[]
 
       if (cpvCodes.length > 0) {
+        const now = new Date()
+        const today = now.toISOString().split("T")[0]
+        const ninetyDaysAgo = new Date(now)
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+        const fallbackFrom = ninetyDaysAgo.toISOString().split("T")[0]
+
+        // Query per CPV — prendiamo un pool ampio e filtriamo in JS
         const { data: itaData } = await supabase
           .from("ita_tenders")
           .select("id, oggetto, importo, provincia, data_scadenza, codice_cpv, cig, data_pubblicazione")
           .or(cpvCodes.map(c => `codice_cpv.ilike.%${c}%`).join(","))
+          .gte("data_scadenza", fallbackFrom)  // esclude tutto ciò che è scaduto da più di 90 giorni
           .order("data_scadenza", { ascending: true, nullsFirst: false })
-          .limit(limit)
+          .limit(limit * 3) // pool ampio per avere margine dopo il partizionamento
 
         if (itaData) {
+          // Partiziona in attivi vs scaduti di recente
+          const active: typeof itaData = []
+          const recentlyExpired: typeof itaData = []
+
           for (const row of itaData) {
+            if (!row.data_scadenza || row.data_scadenza >= today) {
+              active.push(row)
+            } else {
+              recentlyExpired.push(row)
+            }
+          }
+
+          const addItaRow = (row: (typeof itaData)[number], expired: boolean) => {
             const cigKey = row.cig || `ita:${row.id}`
-            if (seenCigs.has(cigKey)) continue
+            if (seenCigs.has(cigKey)) return
             seenCigs.add(cigKey)
 
-            // Trova quali CPV matchano
             const matchedCpvs = cpvCodes.filter(
               (c) => row.codice_cpv && row.codice_cpv.includes(c)
             )
 
-            // Score: base 60 + CPV overlap bonus + province bonus
             let score = 60
-            score += Math.min(matchedCpvs.length * 15, 30) // max +30 per CPV match
+            score += Math.min(matchedCpvs.length * 15, 30)
             if (provincia && row.provincia && row.provincia.toUpperCase() === provincia.toUpperCase()) {
               score += 10
             }
-            // Penalità se scaduto
-            if (row.data_scadenza && new Date(row.data_scadenza) < new Date()) {
-              score -= 20
+            if (expired) {
+              score -= 25 // penalità pesante: mostrati solo come fallback
             }
 
             matches.push({
@@ -114,6 +131,15 @@ export async function POST(req: Request) {
               cpv_match: matchedCpvs,
               stato: null,
             })
+          }
+
+          // Prima i bandi attivi
+          for (const row of active.slice(0, limit)) addItaRow(row, false)
+
+          // Fallback: se pochi attivi, aggiungi scaduti recenti
+          if (active.length < 5) {
+            const slotsLeft = limit - active.length
+            for (const row of recentlyExpired.slice(0, slotsLeft)) addItaRow(row, true)
           }
         }
       }

@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
   const importo_min = searchParams.get("importo_min") || ""
   const importo_max = searchParams.get("importo_max") || ""
   const non_scadute = searchParams.get("non_scadute") || ""
+  const scadenza = searchParams.get("scadenza") || ""
   const pubblicazione = searchParams.get("pubblicazione") || ""
   const page = Number(searchParams.get("page")) || 1
   const pageSize = 20
@@ -111,7 +112,9 @@ export async function GET(request: NextRequest) {
       // Now also searches denominazione_amministrazione_appaltante (stazione appaltante)
       const words = trimmed.split(/\s+/).filter(Boolean)
       for (const word of words) {
-        const term = `%${word}%`
+        const cleanWord = word.replace(/[,()"'\\%]/g, "").trim()
+        if (!cleanWord) continue
+        const term = `%${cleanWord}%`
         query = query.or(
           `cig.ilike.${term},oggetto_gara.ilike.${term},descrizione_cpv.ilike.${term},denominazione_amministrazione_appaltante.ilike.${term}`
         )
@@ -132,7 +135,39 @@ export async function GET(request: NextRequest) {
   }
 
   if (cpv) {
-    query = query.ilike("descrizione_cpv", `${cpv}%`)
+    const cleanCpv = cpv.trim()
+    const digits = cleanCpv.replace(/[^0-9]/g, "")
+    if (digits.startsWith("45")) {
+      query = query.or("oggetto_principale_contratto.eq.LAVORI,descrizione_cpv.ilike.%costruzion%,descrizione_cpv.ilike.%lavori%")
+    } else if (digits.startsWith("72") || digits.startsWith("48")) {
+      query = query.or("descrizione_cpv.ilike.%informatic%,descrizione_cpv.ilike.%software%,descrizione_cpv.ilike.%consulenza%")
+    } else if (digits.startsWith("90")) {
+      query = query.or("descrizione_cpv.ilike.%rifiut%,descrizione_cpv.ilike.%pulizia%,descrizione_cpv.ilike.%fognar%")
+    } else if (digits.startsWith("33")) {
+      query = query.or("descrizione_cpv.ilike.%medic%,descrizione_cpv.ilike.%farmaceutic%,descrizione_cpv.ilike.%sanitar%")
+    } else if (digits.startsWith("60")) {
+      query = query.or("descrizione_cpv.ilike.%trasport%")
+    } else if (digits.startsWith("15")) {
+      query = query.or("descrizione_cpv.ilike.%alimentar%")
+    } else if (digits.startsWith("71")) {
+      query = query.or("descrizione_cpv.ilike.%architett%,descrizione_cpv.ilike.%ingegner%")
+    } else {
+      const safeText = cleanCpv.replace(/[,()"'\\%]/g, "")
+      if (safeText) {
+        query = query.ilike("descrizione_cpv", `%${safeText}%`)
+      }
+    }
+  }
+
+  if (scadenza) {
+    const days = Number.parseInt(scadenza, 10)
+    if (Number.isFinite(days) && days > 0) {
+      const today = getTodayDateString()
+      const maxDate = new Date()
+      maxDate.setDate(maxDate.getDate() + days)
+      const maxDateStr = maxDate.toISOString().slice(0, 10)
+      query = query.gte("data_scadenza_offerta", today).lte("data_scadenza_offerta", maxDateStr)
+    }
   }
 
   if (non_scadute === "true") {

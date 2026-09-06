@@ -86,8 +86,11 @@ export interface AnacFetchParams {
   anno?:     number
   tipo?:     string
   importo?:  string
+  scadenza?: string
   pubblicazione?: string
   provincia?: string
+  cpv?:      string
+  country?:  string
   /** Se true usa il datasource BANDI_IN_CORSO (ds id=81) */
   inCorso?:  boolean
 }
@@ -300,3 +303,193 @@ export async function fetchANAC(params: AnacFetchParams): Promise<SourceResult> 
     return { items: [], total: 0, source: "anac", error: `ANAC fetch: ${err instanceof Error ? err.message : String(err)}` }
   }
 }
+
+// ── DB-backed fetch (uses Supabase cig table) ───────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapCigDbRow(row: Record<string, any>): NormalizedTender {
+  return {
+    id:                  `anac:${row.cig}`,
+    cig:                 row.cig ?? null,
+    oggetto:             row.oggetto_gara ?? null,
+    importo:             typeof row.importo_lotto === "number" ? row.importo_lotto : null,
+    stato:               row.stato ?? "active",
+    provincia:           row.provincia ?? row.sezione_regionale ?? null,
+    data_pubblicazione:  row.data_pubblicazione ?? null,
+    data_scadenza:       row.data_scadenza_offerta ?? null,
+    tipo_contratto:      row.oggetto_principale_contratto ?? null,
+    descrizione_cpv:     row.descrizione_cpv ?? null,
+    sources:             "anac",
+    link_originale:      row.cig
+      ? buildAnacCigUrl(row.cig, row.anac_id_avviso)
+      : null,
+    stazione_appaltante: row.denominazione_amministrazione_appaltante ?? row.sezione_regionale ?? null,
+  }
+}
+
+const TIPO_TO_DB_CONTRATTO: Record<string, string> = {
+  goods:    "FORNITURE",
+  services: "SERVIZI",
+  works:    "LAVORI",
+  forniture: "FORNITURE",
+  servizi:   "SERVIZI",
+  lavori:    "LAVORI",
+}
+
+/**
+ * Interroga i bandi ANAC memorizzati nella tabella Supabase `cig`.
+ * Utilizzato da /api/tenders?source=anac come fallback e sorgente principale
+ * affidabile quando il WAF F5 di dati.anticorruzione.it blocca le chiamate server-side.
+ */
+export async function fetchAnacFromDB(
+  params: AnacFetchParams,
+): Promise<SourceResult | null> {
+  let createAdminClient: typeof import("@/lib/supabase/admin").createAdminClient
+  try {
+    const mod = await import("@/lib/supabase/admin")
+    createAdminClient = mod.createAdminClient
+  } catch {
+    return null
+  }
+
+  let supabase: ReturnType<typeof createAdminClient>
+  try {
+    supabase = createAdminClient()
+  } catch {
+    return null
+  }
+
+  const {
+    q,
+    page = 0,
+    pageSize = 10,
+    tipo,
+    importo,
+    scadenza,
+    pubblicazione,
+    provincia,
+    cpv,
+  } = params
+
+  const offset = page * pageSize
+
+  let query = supabase
+    .from("cig")
+    .select(`
+      id,
+      cig,
+      oggetto_gara,
+      importo_lotto,
+      stato,
+      provincia,
+      data_pubblicazione,
+      data_scadenza_offerta,
+      sezione_regionale,
+      oggetto_principale_contratto,
+      descrizione_cpv,
+      denominazione_amministrazione_appaltante,
+      anac_id_avviso,
+      esito
+    `, { count: "exact" })
+    .eq("stato", "active")
+    .order("data_pubblicazione", { ascending: false })
+    .order("id", { ascending: false })
+    .range(offset, offset + pageSize - 1)
+
+  // Keyword search con sanitizzazione anti-crash PostgREST
+  if (q?.trim()) {
+    const trimmed = q.trim()
+    if (/^[A-Z0-9]{10}$/i.test(trimmed)) {
+      query = query.ilike("cig", `%${trimmed.toUpperCase()}%`)
+    } else {
+      const words = trimmed.split(/\s+/).filter(Boolean)
+      for (const word of words) {
+        const cleanWord = word.replace(/[,()"'\\%]/g, "").trim()
+        if (!cleanWord) continue
+        const term = `%${cleanWord}%`
+        query = query.or(
+          `cig.ilike.${term},oggetto_gara.ilike.${term},descrizione_cpv.ilike.${term},denominazione_amministrazione_appaltante.ilike.${term}`
+        )
+      }
+    }
+  }
+
+  if (provincia) {
+    query = query.eq("provincia", provincia)
+  }
+
+  if (tipo && tipo !== "all") {
+    const dbTipo = TIPO_TO_DB_CONTRATTO[tipo.toLowerCase()]
+    if (dbTipo) {
+      query = query.eq("oggetto_principale_contratto", dbTipo)
+    }
+  }
+
+  if (importo && importo !== "all") {
+    const range = IMPORTO_RANGES[importo]
+    if (range?.gte != null) query = query.gte("importo_lotto", range.gte)
+    if (range?.lte != null) query = query.lte("importo_lotto", range.lte)
+  }
+
+  if (scadenza && scadenza !== "all") {
+    const days = Number.parseInt(scadenza, 10)
+    if (Number.isFinite(days) && days > 0) {
+      const today = new Date().toISOString().slice(0, 10)
+      const maxDate = new Date()
+      maxDate.setDate(maxDate.getDate() + days)
+      const maxDateStr = maxDate.toISOString().slice(0, 10)
+      query = query.gte("data_scadenza_offerta", today).lte("data_scadenza_offerta", maxDateStr)
+    }
+  }
+
+  if (pubblicazione && pubblicazione !== "all") {
+    const cutoff = getPublicationCutoffDate(pubblicazione)
+    if (cutoff) {
+      query = query.gte("data_pubblicazione", cutoff)
+    }
+  }
+
+  if (cpv?.trim()) {
+    const cleanCpv = cpv.trim()
+    const digits = cleanCpv.replace(/[^0-9]/g, "")
+    if (digits.startsWith("45")) {
+      query = query.or("oggetto_principale_contratto.eq.LAVORI,descrizione_cpv.ilike.%costruzion%,descrizione_cpv.ilike.%lavori%")
+    } else if (digits.startsWith("72") || digits.startsWith("48")) {
+      query = query.or("descrizione_cpv.ilike.%informatic%,descrizione_cpv.ilike.%software%,descrizione_cpv.ilike.%consulenza%")
+    } else if (digits.startsWith("90")) {
+      query = query.or("descrizione_cpv.ilike.%rifiut%,descrizione_cpv.ilike.%pulizia%,descrizione_cpv.ilike.%fognar%")
+    } else if (digits.startsWith("33")) {
+      query = query.or("descrizione_cpv.ilike.%medic%,descrizione_cpv.ilike.%farmaceutic%,descrizione_cpv.ilike.%sanitar%")
+    } else if (digits.startsWith("60")) {
+      query = query.or("descrizione_cpv.ilike.%trasport%")
+    } else if (digits.startsWith("15")) {
+      query = query.or("descrizione_cpv.ilike.%alimentar%")
+    } else if (digits.startsWith("71")) {
+      query = query.or("descrizione_cpv.ilike.%architett%,descrizione_cpv.ilike.%ingegner%")
+    } else {
+      const safeText = cleanCpv.replace(/[,()"'\\%]/g, "")
+      if (safeText) {
+        query = query.ilike("descrizione_cpv", `%${safeText}%`)
+      }
+    }
+  }
+
+  try {
+    const { data, count, error } = await query
+    if (error) {
+      console.warn("[anac] Supabase cig query error:", error.message)
+      return null
+    }
+
+    const rows = data || []
+    return {
+      items:  rows.map(mapCigDbRow),
+      total:  count ?? rows.length,
+      source: "anac",
+    }
+  } catch (err) {
+    console.warn("[anac] fetchAnacFromDB exception:", err)
+    return null
+  }
+}
+

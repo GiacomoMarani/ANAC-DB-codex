@@ -33,7 +33,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { fetchTED }  from "@/lib/sources/ted"
 import { fetchIta, fetchItaFromDB } from "@/lib/sources/ita"
-import { fetchANAC } from "@/lib/sources/anac"
+import { fetchANAC, fetchAnacFromDB } from "@/lib/sources/anac"
 import { fetchIntlFromDB, INTL_SOURCE_REVERSE } from "@/lib/sources/intl"
 import type { SourceKey, SourceResult } from "@/lib/sources/types"
 
@@ -127,6 +127,18 @@ async function resolveSource(
     }
 
     if (key === "anac") {
+      const dbResult = await fetchAnacFromDB({
+        q:             commonParams.q,
+        page:          commonParams.page,
+        pageSize:      commonParams.pageSize ?? 10,
+        tipo:          commonParams.tipo,
+        importo:       commonParams.importo,
+        scadenza:      commonParams.scadenza,
+        pubblicazione: commonParams.pubblicazione,
+        country:       commonParams.country,
+      })
+      if (dbResult) return dbResult
+
       return await fetchANAC({
         q:        commonParams.q,
         page:     commonParams.page,

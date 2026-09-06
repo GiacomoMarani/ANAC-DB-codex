@@ -6,6 +6,8 @@ import { NextResponse } from "next/server"
 import { isValidPartitaIva, formatPartitaIva } from "@/lib/utils/piva"
 import { lookupVies } from "@/lib/utils/vies"
 import { lookupScpMit, type ScpAggiudicazione } from "@/lib/services/scpMit"
+import { lookupTedAwards, type TedAward } from "@/lib/services/tedAwards"
+import { deduplicateAwards, type UnifiedAward } from "@/lib/utils/dedupAwards"
 import type { ProfilingResponse } from "@/lib/utils/piva"
 
 /**
@@ -62,70 +64,98 @@ export async function POST(req: Request) {
       )
     }
 
-    // ── VIES + aggiudicatari (DB locale) + SCP/MIT (live) ────────────
+    // ── VIES + DB locale + SCP/MIT (live) + TED Europa (live) ────────
     // 1. VIES (EU Commission, gratuito) → ragione sociale e indirizzo reali
-    // 2. aggiudicatari (tabella locale) → gare vinte reali per questa P.IVA
-    // 3. SCP/MIT (live) → fallback se la tabella locale è vuota/inesistente
+    // 2. DB locale `aggiudicatari` → gare vinte salvate localmente per questa P.IVA
+    // 3. SCP/MIT (live) → Banca dati contratti pubblici MIT (CKAN)
+    // 4. TED Europa (live) → Gare sopra-soglia europea e appalti internazionali
 
-    // Avvia VIES in parallelo (è indipendente)
+    // Avvia VIES, query locale e SCP/MIT in parallelo
     const viesPromise = lookupVies(piva)
 
-    // Prova prima la tabella locale (se esiste)
-    let localData: Array<{
-      codice_fiscale: string
-      denominazione: string | null
-      cig: string
-      importo_aggiudicazione: number | null
-      data_aggiudicazione: string | null
-      codice_cpv: string | null
-      descrizione_cpv: string | null
-      oggetto_gara: string | null
-      provincia: string | null
-      ruolo: string | null
-    }> = []
+    const localPromise = (async () => {
+      try {
+        const { data } = await supabase
+          .from("aggiudicatari")
+          .select("codice_fiscale, denominazione, cig, importo_aggiudicazione, data_aggiudicazione, codice_cpv, descrizione_cpv, oggetto_gara, provincia, ruolo")
+          .eq("codice_fiscale", piva)
+          .order("data_aggiudicazione", { ascending: false })
+          .limit(500)
+        return data && data.length > 0 ? data : []
+      } catch {
+        return []
+      }
+    })()
 
-    try {
-      const { data } = await supabase
-        .from("aggiudicatari")
-        .select("codice_fiscale, denominazione, cig, importo_aggiudicazione, data_aggiudicazione, codice_cpv, descrizione_cpv, oggetto_gara, provincia, ruolo")
-        .eq("codice_fiscale", piva)
-        .order("data_aggiudicazione", { ascending: false })
-        .limit(500)
-      if (data && data.length > 0) localData = data
-    } catch {
-      // Tabella potrebbe non esistere — ignora
+    const scpPromise = lookupScpMit(piva).catch((err) => {
+      console.warn("[profiling] SCP/MIT lookup error:", err)
+      return { records: [], total: 0 }
+    })
+
+    const [viesResult, localData, scpResult] = await Promise.all([
+      viesPromise,
+      localPromise,
+      scpPromise,
+    ])
+
+    const scpData = scpResult.records
+
+    // Nome azienda per interrogare le gare europee su TED (CAN notices)
+    const companyNameForTed =
+      viesResult.name ||
+      localData[0]?.denominazione ||
+      scpData[0]?.denominazione ||
+      null
+
+    let tedAwards: TedAward[] = []
+    if (companyNameForTed) {
+      try {
+        tedAwards = await lookupTedAwards(companyNameForTed, { limit: 100 })
+      } catch (tedErr) {
+        console.warn("[profiling] TED lookup error:", tedErr)
+      }
     }
 
-    // Se la tabella locale è vuota, query live SCP/MIT
-    let scpData: ScpAggiudicazione[] = []
-    let dataSource: "local" | "scp_mit" = "local"
-
-    if (localData.length === 0) {
-      const scpResult = await lookupScpMit(piva)
-      scpData = scpResult.records
-      dataSource = "scp_mit"
-    }
-
-    // Attendi VIES
-    const viesResult = await viesPromise
-
-    // Unifica: usa dati locali se disponibili, altrimenti SCP/MIT
-    const aggiudicatariData = localData.length > 0
-      ? localData
-      : scpData.map((r) => ({
-          codice_fiscale: r.codice_fiscale,
-          denominazione: r.denominazione,
-          cig: r.cig,
-          importo_aggiudicazione: r.importo_aggiudicazione,
-          data_aggiudicazione: r.data_aggiudicazione,
-          codice_cpv: r.codice_cpv,
-          descrizione_cpv: r.descrizione_cpv,
-          oggetto_gara: r.oggetto_gara,
-          provincia: r.provincia,
-          ruolo: r.ruolo,
-        }))
+    // Unifica e deduplica con algoritmo a 3 livelli (CIG esatto, ID notice, Fuzzy heuristic)
+    const { deduped: aggiudicatariData, stats: dedupStats } = deduplicateAwards({
+      localAwards: localData.map((r) => ({
+        ...r,
+        source: "local" as const,
+      })),
+      scpAwards: scpData.map((r) => ({
+        id: `scp:${r.cig}`,
+        codice_fiscale: r.codice_fiscale,
+        denominazione: r.denominazione,
+        cig: r.cig,
+        importo_aggiudicazione: r.importo_aggiudicazione,
+        data_aggiudicazione: r.data_aggiudicazione,
+        codice_cpv: r.codice_cpv,
+        descrizione_cpv: r.descrizione_cpv,
+        oggetto_gara: r.oggetto_gara,
+        provincia: r.provincia,
+        ruolo: r.ruolo,
+        tipo_appalto: r.tipo_appalto,
+        source: "scp_mit" as const,
+      })),
+      tedAwards: tedAwards.map((r) => ({
+        ...r,
+        codice_fiscale: piva,
+        source: "ted" as const,
+      })),
+    })
 
     const hasRealData = aggiudicatariData.length > 0
+
+    let dataSource: "local" | "scp_mit" | "ted" | "merged" = "local"
+    if (localData.length > 0 && scpData.length === 0 && tedAwards.length === 0) {
+      dataSource = "local"
+    } else if (scpData.length > 0 && localData.length === 0 && tedAwards.length === 0) {
+      dataSource = "scp_mit"
+    } else if (tedAwards.length > 0 && localData.length === 0 && scpData.length === 0) {
+      dataSource = "ted"
+    } else if (hasRealData) {
+      dataSource = "merged"
+    }
 
     // ── Inizializza profilo con dati VIES reali ────────────────────
     const profile: ProfilingResponse["profile"] = {
@@ -259,6 +289,13 @@ export async function POST(req: Request) {
       return NextResponse.json({
         profile,
         dataSource,
+        sources: {
+          local: dedupStats.localCount,
+          scp_mit: dedupStats.scpCount,
+          ted: dedupStats.tedCount,
+          duplicates_removed: dedupStats.duplicatesRemoved,
+          total_deduped: dedupStats.totalUnique,
+        },
         ...(dataSource === "scp_mit" ? { scpMitTotal: scpData.length } : {}),
       })
     }
@@ -269,7 +306,14 @@ export async function POST(req: Request) {
       profile,
       foundInRegistry: false,
       dataSource: "none",
-      message: "Nessuna aggiudicazione trovata nel database ANAC né nella banca dati SCP/MIT per questa Partita IVA.",
+      sources: {
+        local: dedupStats.localCount,
+        scp_mit: dedupStats.scpCount,
+        ted: dedupStats.tedCount,
+        duplicates_removed: dedupStats.duplicatesRemoved,
+        total_deduped: 0,
+      },
+      message: "Nessuna aggiudicazione trovata nel database ANAC, nella banca dati SCP/MIT né sul TED europeo per questa Partita IVA.",
     })
   } catch (err) {
     console.error("[profiling] Unhandled error:", err)

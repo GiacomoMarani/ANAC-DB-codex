@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (c) 2024-2026 Giacomo Marani <ing.giacomo.marani@gmail.com>
-// Project: ANAC-DB-codex � https://github.com/GiacomoMarani/ANAC-DB-codex
+// Project: ANAC-DB-codex — https://github.com/GiacomoMarani/ANAC-DB-codex
 // Watermark: GM-ANAC-7f3a9c2e-4b1d-4e8f-a5c3-2d9f0e1b6a4d
 "use client"
 
@@ -23,6 +23,7 @@ import type { SourceKey } from "@/lib/sources/types"
 import { SOURCE_LABELS, SOURCE_COLORS, buildAnacCigUrl } from "@/lib/sources/types"
 import type { NormalizedTender } from "@/lib/sources/types"
 import { useDebounce } from "@/hooks/use-debounce"
+import { useSearchParams } from "next/navigation"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -100,7 +101,18 @@ const SearchQueryContext = createContext<string>("")
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const fetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}))
+    throw new Error(errJson.error || `HTTP ${res.status}`)
+  }
+  const json = await res.json()
+  if (json.error) {
+    throw new Error(json.error)
+  }
+  return json
+}
 
 function formatCurrency(v: number | null) {
   if (!v) return null
@@ -662,14 +674,25 @@ interface CigApiResponse {
 }
 
 export function GareListClient() {
-  const [search,   setSearch]   = useState("")
-  const [tipo,     setTipo]     = useState("")
-  const [importo,  setImporto]  = useState("")
-  const [scadenza, setScadenza] = useState("")
-  const [pubblicazione, setPubblicazione] = useState("")
-  const [source,   setSource]   = useState<SourceKey | "all">("all")
-  const [cpv,      setCpv]      = useState("")
-  const [page,     setPage]     = useState(0)
+  const searchParams = useSearchParams()
+
+  const initialSource = (searchParams.get("source") as SourceKey | "all") || "all"
+  const initialSearch = searchParams.get("q") || searchParams.get("search") || ""
+  const initialTipo = searchParams.get("tipo") || ""
+  const initialImporto = searchParams.get("importo") || ""
+  const initialScadenza = searchParams.get("scadenza") || ""
+  const initialPubblicazione = searchParams.get("pubblicazione") || ""
+  const initialCpv = searchParams.get("cpv") || ""
+  const initialPage = Math.max(0, parseInt(searchParams.get("p") || "0", 10) || 0)
+
+  const [search,   setSearch]   = useState(initialSearch)
+  const [tipo,     setTipo]     = useState(initialTipo)
+  const [importo,  setImporto]  = useState(initialImporto)
+  const [scadenza, setScadenza] = useState(initialScadenza)
+  const [pubblicazione, setPubblicazione] = useState(initialPubblicazione)
+  const [source,   setSource]   = useState<SourceKey | "all">(initialSource)
+  const [cpv,      setCpv]      = useState(initialCpv)
+  const [page,     setPage]     = useState(initialPage)
   const [showAiModal, setShowAiModal] = useState(false)
   const [showRecent, setShowRecent] = useState(false)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
@@ -677,6 +700,14 @@ export function GareListClient() {
 
   const deferredSearch = useDebounce(search, 300)
   const deferredCpv    = useDebounce(cpv, 400)
+
+  // Sync with URL query parameters if they change
+  useEffect(() => {
+    const urlSource = (searchParams.get("source") as SourceKey | "all") || "all"
+    if (urlSource !== source) {
+      setSource(urlSource)
+    }
+  }, [searchParams])
 
   // Load recent searches on mount
   useEffect(() => {
@@ -725,12 +756,13 @@ export function GareListClient() {
       if (range?.min != null) params.set("importo_min", String(range.min))
       if (range?.max != null) params.set("importo_max", String(range.max))
     }
+    if (scadenza && scadenza !== "all") params.set("scadenza", scadenza)
     if (pubblicazione && pubblicazione !== "all") params.set("pubblicazione", pubblicazione)
     if (deferredCpv.trim()) params.set("cpv", deferredCpv.trim())
     return params.toString()
-  }, [needAnac, page, deferredSearch, tipo, importo, pubblicazione, deferredCpv])
+  }, [needAnac, page, deferredSearch, tipo, importo, scadenza, pubblicazione, deferredCpv])
 
-  const { data: anacData, isLoading: anacLoading } = useSWR<CigApiResponse>(
+  const { data: anacData, isLoading: anacLoading, error: anacError, mutate: mutateAnac } = useSWR<CigApiResponse>(
     needAnac ? `/api/cig?${anacQueryString}` : null,
     fetcher,
     { revalidateOnFocus: false, keepPreviousData: true, dedupingInterval: 2000 },
@@ -774,11 +806,13 @@ export function GareListClient() {
     return params.toString()
   }, [page, deferredSearch, tipo, importo, scadenza, pubblicazione, source, needTenders, deferredCpv])
 
-  const { data, isLoading: swrLoading } = useSWR<TendersResponse>(
+  const { data, isLoading: swrLoading, error: swrError, mutate: mutateTenders } = useSWR<TendersResponse>(
     needTenders ? `/api/tenders?${queryString}` : null,
     fetcher,
     { revalidateOnFocus: false, keepPreviousData: true, dedupingInterval: 2000 },
   )
+
+  const currentError = isAnacMode ? anacError : isAllMode ? (anacError || swrError) : swrError
 
   // ── Dati unificati ─────────────────────────────────────────────────────────
   // In modalità "all": merge ANAC + TED/ITA con ordinamento per scadenza
@@ -960,20 +994,18 @@ export function GareListClient() {
           </SelectContent>
         </Select>
 
-        {/* Scadenza (solo non-ANAC: BANDI_IN_CORSO è già filtrato) */}
-        {!isAnacMode && (
-          <Select value={scadenza || "all"} onValueChange={v => { setScadenza(v === "all" ? "" : v); handleFilterChange() }}>
-            <SelectTrigger id="filter-scadenza" className="w-full sm:w-[180px] text-xs sm:text-sm">
-              <SelectValue placeholder="Scadenza offerte" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Scadenza offerte</SelectItem>
-              <SelectItem value="7">Entro 7 giorni</SelectItem>
-              <SelectItem value="30">Entro 30 giorni</SelectItem>
-              <SelectItem value="90">Entro 3 mesi</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
+        {/* Scadenza */}
+        <Select value={scadenza || "all"} onValueChange={v => { setScadenza(v === "all" ? "" : v); handleFilterChange() }}>
+          <SelectTrigger id="filter-scadenza" className="w-full sm:w-[180px] text-xs sm:text-sm">
+            <SelectValue placeholder="Scadenza offerte" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Scadenza offerte</SelectItem>
+            <SelectItem value="7">Entro 7 giorni</SelectItem>
+            <SelectItem value="30">Entro 30 giorni</SelectItem>
+            <SelectItem value="90">Entro 3 mesi</SelectItem>
+          </SelectContent>
+        </Select>
 
         {/* Pubblicazione */}
         <Select value={pubblicazione || "all"} onValueChange={v => { setPubblicazione(v === "all" ? "" : v); handleFilterChange() }}>
@@ -1071,8 +1103,25 @@ export function GareListClient() {
         )}
       </div>
 
+      {/* ── Error State ── */}
+      {currentError && !isLoading && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-center space-y-2">
+          <p className="text-sm font-medium text-destructive">
+            {currentError instanceof Error ? currentError.message : "Si è verificato un errore nel caricamento delle gare."}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { if (isAnacMode) mutateAnac(); else mutateTenders(); }}
+            className="text-xs"
+          >
+            Riprova
+          </Button>
+        </div>
+      )}
+
       {/* ── Tender Cards ── */}
-      {items.length === 0 && !isLoading && (
+      {items.length === 0 && !isLoading && !currentError && (
         <div className="text-center py-16 text-muted-foreground">
           <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
           <p className="text-lg font-medium">Nessuna gara trovata</p>
