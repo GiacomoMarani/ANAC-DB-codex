@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { isValidPartitaIva } from "@/lib/utils/piva"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -86,10 +87,10 @@ interface TenderMatch {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Validazione P.IVA lato client (formato rapido, 11 cifre) */
+/** Validazione P.IVA lato client (formato 11 cifre e checksum Luhn) */
 function isValidPivaFormat(piva: string): boolean {
   const clean = piva.replace(/[\s\-\.]/g, "")
-  return /^\d{11}$/.test(clean)
+  return isValidPartitaIva(clean)
 }
 
 function formatCurrency(n: number | null): string {
@@ -436,7 +437,7 @@ export default function ProfilazionePage() {
                 />
                 {piva && !isValid && (
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-rose-500 font-medium">
-                    11 cifre richieste
+                    {piva.replace(/[\s\-\.]/g, "").length !== 11 ? "11 cifre richieste" : "Checksum non valido"}
                   </span>
                 )}
               </div>

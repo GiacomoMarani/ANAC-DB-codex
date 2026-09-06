@@ -163,8 +163,11 @@ export async function POST(req: Request) {
         importoTotale += importo
 
         if (row.data_aggiudicazione) {
-          const ts = new Date(row.data_aggiudicazione).getTime()
-          if (!isNaN(ts)) dates.push(ts)
+          const d = new Date(row.data_aggiudicazione)
+          const yr = d.getFullYear()
+          if (!isNaN(d.getTime()) && yr >= 1990 && yr <= 2035) {
+            dates.push(d.getTime())
+          }
         }
 
         if (row.provincia && row.provincia.trim()) {
