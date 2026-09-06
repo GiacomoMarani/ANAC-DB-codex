@@ -232,11 +232,36 @@ async function syncAnacPVL(maxPages = Infinity) {
     staleClosed = count ?? 0
   }
 
+  // ── Cleanup: elimina fisicamente i bandi scaduti da entrambe le tabelle ──
+  let cigDeleted = 0
+  let itaDeleted = 0
+
+  // CIG: elimina bandi con scadenza passata
+  {
+    const { count } = await supabase
+      .from("cig")
+      .delete({ count: "exact" })
+      .lt("data_scadenza_offerta", today)
+      .not("data_scadenza_offerta", "is", null)
+    cigDeleted = count ?? 0
+  }
+
+  // ita_tenders: elimina bandi con scadenza passata
+  {
+    const { count } = await supabase
+      .from("ita_tenders")
+      .delete({ count: "exact" })
+      .lt("data_scadenza", today)
+      .not("data_scadenza", "is", null)
+    itaDeleted = count ?? 0
+  }
+
   return {
     totalAvvisi,
     cigsFound: allCigs.size,
     upserted: totalUpserted,
     staleClosed,
+    cleanup: { cigDeleted, itaDeleted },
     errors,
   }
 }

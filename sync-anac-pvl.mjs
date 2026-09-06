@@ -390,7 +390,25 @@ async function main() {
     }
   }
 
-  // 5. Riepilogo
+  // 5. Elimina fisicamente i bandi scaduti (garbage collection)
+  console.log("\n[5] Eliminazione fisica bandi scaduti...");
+  const todayGC = new Date().toISOString().split("T")[0];
+
+  const { count: cigDel } = await supabase
+    .from("cig")
+    .delete({ count: "exact" })
+    .lt("data_scadenza_offerta", todayGC)
+    .not("data_scadenza_offerta", "is", null);
+  console.log("  CIG eliminati:        " + (cigDel ?? 0));
+
+  const { count: itaDel } = await supabase
+    .from("ita_tenders")
+    .delete({ count: "exact" })
+    .lt("data_scadenza", todayGC)
+    .not("data_scadenza", "is", null);
+  console.log("  ita_tenders eliminati: " + (itaDel ?? 0));
+
+  // 6. Riepilogo
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log("\n======================================================================");
   console.log("  SINCRONIZZAZIONE COMPLETATA");
@@ -400,6 +418,8 @@ async function main() {
   console.log("  CIG biddabili:        " + allCigs.size);
   console.log("  CIG scaduti:          " + totalSkippedExpired + " (scartati)");
   console.log("  Aggiornati Supabase:  " + totalUpserted);
+  console.log("  Cleanup CIG:          " + (cigDel ?? 0) + " eliminati");
+  console.log("  Cleanup ita_tenders:  " + (itaDel ?? 0) + " eliminati");
   console.log("  UUID inclusi:         si (anac_id_avviso)");
   console.log("  Scadenze incluse:     si (data_scadenza_offerta)");
   console.log("  Tempo totale:         " + elapsed + "s");
