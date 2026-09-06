@@ -147,9 +147,17 @@ export async function POST(req: Request) {
       console.warn("[match] ita_tenders query error:", err)
     }
 
-    // ── 2. Cerca su cig (matching testo via descrizione_cpv) ──────
+    // ── 2. Cerca su cig (matching testo + codice CPV) ──────────
     try {
-      // Usa le prime 3 parole significative di ogni CPV description per la ricerca
+      // 2a. Estrai codici CPV numerici (8 cifre) per matching esatto
+      const cpvNumericCodes = cpv_codes
+        .map((c: string) => {
+          const match = c.match(/^(\d{8})/)
+          return match ? match[1] : null
+        })
+        .filter(Boolean) as string[]
+
+      // 2b. Estrai parole descrittive per matching testuale
       const searchTerms = cpv_codes
         .slice(0, 5) // limita a 5 CPV per performance
         .map((c: string) => {
@@ -164,15 +172,20 @@ export async function POST(req: Request) {
         })
         .filter((t: string) => t.length >= 4)
 
-      if (searchTerms.length > 0) {
-        const orConditions = searchTerms
-          .map((term: string) => `descrizione_cpv.ilike.%${term}%`)
-          .join(",")
+      // Combina: codici CPV + termini testuali
+      const orParts: string[] = []
+      for (const code of cpvNumericCodes) {
+        orParts.push(`descrizione_cpv.ilike.%${code}%`)
+      }
+      for (const term of searchTerms) {
+        orParts.push(`descrizione_cpv.ilike.%${term}%`)
+      }
 
+      if (orParts.length > 0) {
         const { data: cigData } = await supabase
           .from("cig")
           .select("cig, oggetto_gara, importo_lotto, provincia, data_scadenza_offerta, descrizione_cpv, stato")
-          .or(orConditions)
+          .or(orParts.join(","))
           .order("data_pubblicazione", { ascending: false })
           .limit(limit)
 
@@ -184,12 +197,20 @@ export async function POST(req: Request) {
             // Filtra solo gare attive
             if (!isActiveTender(row)) continue
 
-            // Score
-            let score = 50
+            // Score: base 50 per match testuale, 60 per match codice CPV
+            const cpvCodeMatch = cpvNumericCodes.some(
+              (c) => row.descrizione_cpv && row.descrizione_cpv.includes(c)
+            )
+            let score = cpvCodeMatch ? 60 : 50
+
             const matchedTerms = searchTerms.filter(
               (t: string) => row.descrizione_cpv && row.descrizione_cpv.toLowerCase().includes(t.toLowerCase())
             )
-            score += Math.min(matchedTerms.length * 12, 24)
+            // Bonus per match multipli
+            const matchedCpvCodes = cpvNumericCodes.filter(
+              (c) => row.descrizione_cpv && row.descrizione_cpv.includes(c)
+            )
+            score += Math.min((matchedTerms.length + matchedCpvCodes.length) * 10, 30)
 
             if (provincia && row.provincia && row.provincia.toUpperCase() === provincia.toUpperCase()) {
               score += 10
@@ -203,7 +224,7 @@ export async function POST(req: Request) {
               data_scadenza: row.data_scadenza_offerta,
               descrizione_cpv: row.descrizione_cpv,
               score: Math.max(0, Math.min(100, score)),
-              cpv_match: matchedTerms,
+              cpv_match: [...matchedCpvCodes, ...matchedTerms],
               stato: row.stato,
             })
           }
