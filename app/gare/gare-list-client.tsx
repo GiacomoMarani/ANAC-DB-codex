@@ -1139,7 +1139,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
         : `https://www.get-cato.com/gara/${tender.id}`
   )
 
-  const cpvCodes = tender.descrizione_cpv ?? tender.tipo_contratto
+  const cpvCodes = tender.descrizione_cpv || null
 
   // Country flag emoji lookup
   const COUNTRY_FLAGS: Record<string, string> = {
