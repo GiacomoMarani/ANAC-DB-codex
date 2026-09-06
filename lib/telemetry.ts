@@ -6,9 +6,9 @@
 /**
  * lib/telemetry.ts — Telemetria passiva anti-copia
  *
- * Al primo avvio dell'applicazione, invia un ping silenzioso a un endpoint
- * di tracking con l'hostname del deployment. Questo permette di rilevare
- * deploy non autorizzati del codice.
+ * Al primo avvio dell'applicazione, invia un ping silenzioso alla tabella
+ * Supabase `telemetry_pings` con l'hostname del deployment. Questo permette
+ * di rilevare deploy non autorizzati del codice.
  *
  * - Non raccoglie dati personali degli utenti
  * - Non impatta le performance (fire-and-forget)
@@ -29,15 +29,18 @@ export function telemetryPing() {
   const payload = {
     watermark: WATERMARK,
     hostname: typeof window !== "undefined" ? window.location.hostname : process.env.VERCEL_URL ?? "unknown",
-    timestamp: new Date().toISOString(),
     version: process.env.NEXT_PUBLIC_BUILD_ID ?? "dev",
   }
 
   try {
-    // Fire-and-forget: non blocca, non lancia errori
+    // Fire-and-forget: scrive nella tabella telemetry_pings via REST API Supabase
     fetch(TELEMETRY_ENDPOINT, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+        "Prefer": "return=minimal",
+      },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(5000),
     }).catch(() => {}) // silenzioso
