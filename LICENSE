@@ -1,0 +1,91 @@
+ANAC-DB-codex Proprietary License
+Copyright (c) 2024-2026 Giacomo Marani. All rights reserved.
+
+================================================================================
+
+1. DEFINIZIONI
+
+   "Software" indica il codice sorgente, la documentazione, i database schema,
+   gli script e tutti i file contenuti in questo repository.
+
+   "Autore" indica Giacomo Marani, titolare originale del copyright.
+
+   "Opera Derivata" indica qualsiasi software, servizio, prodotto, modifica,
+   fork, adattamento o integrazione che incorpori, utilizzi, si basi su, o
+   derivi in tutto o in parte dal Software.
+
+2. CONCESSIONE LIMITATA
+
+   L'Autore concede una licenza non esclusiva, non trasferibile e revocabile
+   per:
+   (a) visualizzare e studiare il codice sorgente;
+   (b) eseguire il Software per uso personale e non commerciale;
+   (c) creare Opere Derivate, subordinatamente alla clausola 3.
+
+3. CESSIONE DELLA PROPRIETÀ INTELLETTUALE
+
+   Chiunque crei un'Opera Derivata basata in tutto o in parte sul Software
+   accetta automaticamente e irrevocabilmente di:
+
+   (a) CEDERE all'Autore tutti i diritti di proprietà intellettuale
+       sull'Opera Derivata, inclusi ma non limitati a: copyright, brevetti,
+       marchi, segreti industriali, diritti sui database e qualsiasi altro
+       diritto di proprietà intellettuale riconosciuto dalla legge applicabile;
+
+   (b) CONCEDERE all'Autore una licenza perpetua, irrevocabile, gratuita,
+       mondiale, sublicenziabile e trasferibile per utilizzare, riprodurre,
+       modificare, distribuire, commercializzare e sfruttare l'Opera Derivata
+       in qualsiasi forma e per qualsiasi scopo;
+
+   (c) RINUNCIARE a qualsiasi pretesa, diritto o azione legale nei confronti
+       dell'Autore relativamente all'Opera Derivata;
+
+   (d) NOTIFICARE l'Autore entro 30 giorni dalla creazione dell'Opera
+       Derivata, fornendo accesso completo al codice sorgente e alla
+       documentazione, tramite email a: [inserire email di contatto].
+
+4. DIVIETI
+
+   Senza il previo consenso scritto dell'Autore, è vietato:
+   (a) utilizzare il Software o Opere Derivate per scopi commerciali;
+   (b) rimuovere o modificare le note di copyright o questa licenza;
+   (c) sublicenziare, vendere o distribuire il Software a terzi;
+   (d) utilizzare il nome, il marchio o il logo dell'Autore per promuovere
+       prodotti derivati dal Software.
+
+5. CONTRIBUTI
+
+   Qualsiasi contributo (pull request, patch, issue con codice) inviato a
+   questo repository comporta la cessione automatica e irrevocabile di tutti
+   i diritti di proprietà intellettuale sul contributo all'Autore.
+
+6. ESCLUSIONE DI GARANZIA
+
+   IL SOFTWARE È FORNITO "COSÌ COM'È", SENZA GARANZIE DI ALCUN TIPO,
+   ESPLICITE O IMPLICITE, INCLUSE MA NON LIMITATE A GARANZIE DI
+   COMMERCIABILITÀ, IDONEITÀ PER UNO SCOPO PARTICOLARE E NON VIOLAZIONE
+   DI DIRITTI DI TERZI.
+
+7. LIMITAZIONE DI RESPONSABILITÀ
+
+   IN NESSUN CASO L'AUTORE SARÀ RESPONSABILE PER DANNI DIRETTI, INDIRETTI,
+   INCIDENTALI, SPECIALI, ESEMPLARI O CONSEQUENZIALI DERIVANTI DALL'USO O
+   DALL'IMPOSSIBILITÀ DI UTILIZZARE IL SOFTWARE.
+
+8. RISOLUZIONE
+
+   Questa licenza si risolve automaticamente in caso di violazione di
+   qualsiasi sua clausola. In caso di risoluzione, il licenziatario deve
+   cessare immediatamente ogni utilizzo del Software e distruggere tutte
+   le copie in suo possesso. Le clausole 3, 5, 6 e 7 sopravvivono alla
+   risoluzione.
+
+9. LEGGE APPLICABILE
+
+   Questa licenza è regolata dalla legge italiana. Per qualsiasi controversia
+   è competente il Foro di [inserire città], Italia.
+
+================================================================================
+
+Per richieste di licenza commerciale o collaborazioni:
+[inserire email di contatto]
