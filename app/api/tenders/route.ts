@@ -7,36 +7,35 @@
  *   tipo     — goods | services | works
  *   importo  — fascia (< €40.000 | €40k – €150k | €150k – €1M | €1M – €5M | > €5M)
  *   scadenza — giorni alla scadenza (7 | 30 | 90)
- *   source   — fonte specifica: ted | anac | cato | sintel | mepa | start_toscana |
+ *   source   — fonte specifica: ted | anac | ita | sintel | mepa | start_toscana |
  *              halleyweb | place_vda | intercenter | sardegna | tuttogare |
  *              lazio_stella | estar | bolzano | digitalpa | abruzzo | net4market |
- *              acquedotto_fiora | empulia | soresa | efvg | bandolo |
- *              incentivi_gov | invitalia | inpa_gov | concorsipubblici | euraxess |
- *              ted_bandolo | untalent
+ *              acquedotto_fiora | empulia | soresa | efvg | intl |
+ *              boamp | contracts_finder | grants_gov | ec_funding
  *              (può essere ripetuto più volte per multi-fonte)
  *   country  — filtro paese ISO: IT | FR | EU | US | GB | DE | ES | INTL
- *              (agisce su Bandolo; TED e CATO/ANAC restano solo italiani)
+ *              (agisce su intl_tenders; TED e ITA/ANAC restano solo italiani)
  *
  * Fan-out per fonte:
  *   ted            → adapter TED Europa diretto (X-API-Key)
  *   anac           → adapter ANAC diretto (BDNCP Superset / Dremio)
- *   cato / (vuoto) → Cato generico (tutte le sotto-fonti)
- *   altre chiavi   → Cato, filtrato client-side sul campo 'sources' (l'API Cato non
- *                    supporta un filtro server-side per fonte — vedi lib/sources/cato.ts).
- *                    NOTA: Cato aggrega anche 'ted' e 'pvl_anac' (= ANAC) al suo interno,
+ *   ita / (vuoto)  → ITA generico (tutte le sotto-fonti)
+ *   altre chiavi   → ITA, filtrato client-side sul campo 'sources' (l'API ITA non
+ *                    supporta un filtro server-side per fonte — vedi lib/sources/ita.ts).
+ *                    NOTA: ITA aggrega anche 'ted' e 'pvl_anac' (= ANAC) al suo interno,
  *                    ma quelle due chiavi non sono esposte qui perché già coperte dagli
  *                    adapter diretti sopra (evita fonti duplicate/ridondanti in UI).
  */
 import { NextRequest, NextResponse } from "next/server"
 import { fetchTED }  from "@/lib/sources/ted"
-import { fetchCato, fetchCatoFromDB } from "@/lib/sources/cato"
+import { fetchIta, fetchItaFromDB } from "@/lib/sources/ita"
 import { fetchANAC } from "@/lib/sources/anac"
-import { fetchBandoloFromDB, BANDOLO_SOURCE_REVERSE } from "@/lib/sources/bandolo"
+import { fetchIntlFromDB, INTL_SOURCE_REVERSE } from "@/lib/sources/intl"
 import type { SourceKey, SourceResult } from "@/lib/sources/types"
 
-// Mappa fonte → valore raw del campo 'sources' di Cato (usato per il filtro client-side
-// in fetchCato, l'API Cato non supporta un filtro server-side — vedi lib/sources/cato.ts)
-const CATO_SOURCE_MAP: Partial<Record<SourceKey, string>> = {
+// Mappa fonte → valore raw del campo 'sources' di ITA (usato per il filtro client-side
+// in fetchIta, l'API ITA non supporta un filtro server-side — vedi lib/sources/ita.ts)
+const ITA_SOURCE_MAP: Partial<Record<SourceKey, string>> = {
   sintel:           "sintel",
   mepa:             "acquistinretepa",
   start_toscana:    "start_toscana",
@@ -77,7 +76,7 @@ const CATO_SOURCE_MAP: Partial<Record<SourceKey, string>> = {
   appaltiitalia:    "appaltiitalia",
   eni_proc:         "eni_proc",
   sisgap:           "sisgap",
-  cato:             "",  // vuoto = tutte le sotto-fonti Cato, nessun filtro
+  ita:              "",  // vuoto = tutte le sotto-fonti ITA, nessun filtro
   // anac: usa fetchANAC diretto
 }
 
@@ -115,7 +114,7 @@ function isPublishedSince(value: string | null, cutoff: Date, now = new Date()):
 
 async function resolveSource(
   key: SourceKey,
-  commonParams: Parameters<typeof fetchCato>[0],
+  commonParams: Parameters<typeof fetchIta>[0],
   tedKey: string,
 ): Promise<SourceResult> {
   try {
@@ -135,10 +134,10 @@ async function resolveSource(
       })
     }
 
-    // ── Bandolo: sotto-fonti individuali (incentivi_gov, invitalia, …) ──
-    if (key === "bandolo") {
-      // Meta-source: tutti i bandi Bandolo, senza filtro sotto-fonte
-      const result = await fetchBandoloFromDB({
+    // ── Fonti esterne (intl_tenders): boamp, contracts-finder, grants.gov, ec.europa.eu, RSS ──
+    if (key === "intl") {
+      // Meta-source: tutti i bandi INTL, senza filtro sotto-fonte
+      const result = await fetchIntlFromDB({
         q:            commonParams.q,
         page:         commonParams.page,
         pageSize:     commonParams.pageSize ?? 10,
@@ -147,13 +146,13 @@ async function resolveSource(
         pubblicazione: commonParams.pubblicazione,
         country:      commonParams.country,
       })
-      return result ?? { items: [], total: 0, source: "bandolo" }
+      return result ?? { items: [], total: 0, source: "intl" }
     }
 
-    const bandoloSubSource = BANDOLO_SOURCE_REVERSE[key]
-    if (bandoloSubSource !== undefined) {
-      // Sotto-fonte specifica: es. incentivi_gov → WHERE source = 'incentivi.gov.it'
-      const result = await fetchBandoloFromDB({
+    const intlSubSource = INTL_SOURCE_REVERSE[key]
+    if (intlSubSource !== undefined) {
+      // Sotto-fonte specifica: es. boamp → WHERE source = 'boamp'
+      const result = await fetchIntlFromDB({
         q:            commonParams.q,
         page:         commonParams.page,
         pageSize:     commonParams.pageSize ?? 10,
@@ -161,23 +160,23 @@ async function resolveSource(
         scadenza:     commonParams.scadenza,
         pubblicazione: commonParams.pubblicazione,
         country:      commonParams.country,
-        subSource:    bandoloSubSource,
+        subSource:    intlSubSource,
       }, key)
       return result ?? { items: [], total: 0, source: key }
     }
 
-    const catoSrc = CATO_SOURCE_MAP[key]
-    if (catoSrc !== undefined) {
+    const itaSrc = ITA_SOURCE_MAP[key]
+    if (itaSrc !== undefined) {
       // Try DB first (instant SQL query), fall back to API multi-page scan
-      const dbResult = await fetchCatoFromDB({ ...commonParams, source: catoSrc || undefined }, key)
+      const dbResult = await fetchItaFromDB({ ...commonParams, source: itaSrc || undefined }, key)
       if (dbResult) return dbResult
-      return await fetchCato({ ...commonParams, source: catoSrc || undefined }, key)
+      return await fetchIta({ ...commonParams, source: itaSrc || undefined }, key)
     }
 
-    // Fonte sconosciuta → try DB, then fallback Cato generico
-    const dbResult = await fetchCatoFromDB(commonParams, "cato")
+    // Fonte sconosciuta → try DB, then fallback ITA generico
+    const dbResult = await fetchItaFromDB(commonParams, "ita")
     if (dbResult) return dbResult
-    return await fetchCato(commonParams, "cato")
+    return await fetchIta(commonParams, "ita")
   } catch (err) {
     return {
       items:  [],
@@ -200,11 +199,11 @@ export async function GET(request: NextRequest) {
   const cpv      = sp.get("cpv") ?? undefined
   const country  = sp.get("country") ?? undefined
 
-  // Multi-valore: ?source=ted&source=cato
+  // Multi-valore: ?source=ted&source=ita
   const rawSources = sp.getAll("source")
   const sources: SourceKey[] = rawSources.length > 0
     ? (rawSources as SourceKey[])
-    : ["ted", "cato", "bandolo"] // default: TED + Cato + Bandolo (aggregazione reale multi-fonte)
+    : ["ted", "ita", "intl"] // default: TED + ITA + INTL (aggregazione reale multi-fonte)
 
   const tedKey = process.env.TED_API_KEY ?? ""
 
@@ -237,7 +236,7 @@ export async function GET(request: NextRequest) {
   })
 
   // Filtra per scadenza massima (giorni dalla scadenza)
-  // Solo Bandolo applica questo filtro server-side; per TED/Cato/CatoFromDB
+  // Solo INTL applica questo filtro server-side; per TED/ITA/ItaFromDB
   // applichiamo il filtro qui come post-filter
   if (scadenza) {
     const maxDays = parseInt(scadenza, 10)
@@ -259,7 +258,7 @@ export async function GET(request: NextRequest) {
     totalItems = allItems.length
   }
 
-  // Filtro CPV — solo per codice, prefix-match (Cato/TED non supportano filtro server-side)
+  // Filtro CPV — solo per codice, prefix-match (ITA/TED non supportano filtro server-side)
   if (cpv) {
     const cpvDigits = cpv.replace(/[^0-9]/g, "")
     allItems = allItems.filter(item => {

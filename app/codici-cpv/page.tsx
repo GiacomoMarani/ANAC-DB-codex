@@ -9,11 +9,11 @@
  * ted.europa.eu. Gerarchia (divisione/gruppo/classe/categoria/sottocategoria, genitori,
  * foglie/rami) derivata autonomamente dal codice a 8 cifre — verificata: i conteggi
  * per livello (45/272/1002/2379/5756) e foglie/rami (6531/2923) combaciano esattamente
- * con quelli mostrati da Cato, confermando che la struttura è equivalente.
+ * con quelli mostrati da ITA, confermando che la struttura è equivalente.
  *
  * Ricerca principale: full-text fuzzy su etichetta + intera gerarchia degli antenati
  * (indice a prefisso, tutto client-side, nessun download pesante) — replica il
- * comportamento osservato su Cato (es. "pulizia uffici" → centinaia/migliaia di
+ * comportamento osservato su ITA (es. "pulizia uffici" → centinaia/migliaia di
  * risultati con evidenziazione, non solo i top-20 semantici).
  * Ricerca per codice: corsia preferenziale per query numeriche (es. "45453000", "454",
  * "45453000-7") che fa prefix-match diretto su node.code, ispirata a elencocpv.it.

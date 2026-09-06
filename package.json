@@ -7,8 +7,8 @@
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
-    "sync:cato": "node scripts/sync-cato.mjs",
-    "sync:cato:full": "node scripts/sync-cato.mjs --full"
+    "sync:ita": "node scripts/sync-ita.mjs",
+    "sync:ita:full": "node scripts/sync-ita.mjs --full"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

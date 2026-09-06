@@ -57,7 +57,7 @@ function mapGrantsGovRecord(opp) {
     settori:     opp.cfdaList?.join(", ") || null,
     source:      "grants.gov",
     link:        `https://www.grants.gov/search-results-detail/${opp.id}`,
-    bandolo_created_at: opp.openDate ? new Date(parseGrantsGovDate(opp.openDate) ?? opp.openDate).toISOString().slice(0,10) : null,
+    intl_created_at: opp.openDate ? new Date(parseGrantsGovDate(opp.openDate) ?? opp.openDate).toISOString().slice(0,10) : null,
     synced_at:   new Date().toISOString(),
   };
 }
@@ -148,7 +148,7 @@ async function main() {
       for (let i = 0; i < records.length; i += UPSERT_BATCH) {
         const batch = records.slice(i, i + UPSERT_BATCH);
         const { error } = await supabase
-          .from("bandolo_tenders")
+          .from("intl_tenders")
           .upsert(batch, { onConflict: "id", ignoreDuplicates: false });
         if (error) {
           console.error(`  ❌ Upsert error: ${error.message}`);
@@ -181,7 +181,7 @@ async function main() {
   // Cleanup scaduti
   if (!IS_DRY_RUN) {
     const { count } = await supabase
-      .from("bandolo_tenders")
+      .from("intl_tenders")
       .delete({ count: "exact" })
       .eq("source", "grants.gov")
       .lt("scadenza", todayStr)

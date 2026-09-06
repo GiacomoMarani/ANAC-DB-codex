@@ -81,7 +81,7 @@ function mapECRecord(item) {
     settori,
     source:         "ec.europa.eu",
     link,
-    bandolo_created_at: pubblicazione ? new Date(pubblicazione).toISOString() : null,
+    intl_created_at: pubblicazione ? new Date(pubblicazione).toISOString() : null,
     synced_at:      new Date().toISOString(),
     // Non salvato ma usato per il filtro
     _status:        status,
@@ -170,7 +170,7 @@ async function main() {
     for (let i = 0; i < records.length; i += UPSERT_BATCH) {
       const batch = records.slice(i, i + UPSERT_BATCH);
       const { error } = await supabase
-        .from("bandolo_tenders")
+        .from("intl_tenders")
         .upsert(batch, { onConflict: "id", ignoreDuplicates: true });
       if (error) {
         console.error(`  ❌ Upsert error: ${error.message}`);
@@ -186,7 +186,7 @@ async function main() {
   // Cleanup scaduti
   if (!IS_DRY_RUN) {
     const { count } = await supabase
-      .from("bandolo_tenders")
+      .from("intl_tenders")
       .delete({ count: "exact" })
       .eq("source", "ec.europa.eu")
       .lt("scadenza", todayStr)

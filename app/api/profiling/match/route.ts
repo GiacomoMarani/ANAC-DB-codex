@@ -5,9 +5,9 @@ import { isActiveTender } from "@/lib/utils/tenderLogic"
  * POST /api/profiling/match
  *
  * Matching bandi — riceve una lista di descrizioni CPV e restituisce
- * i bandi attivi compatibili dalle tabelle `cig` e `cato_tenders`.
+ * i bandi attivi compatibili dalle tabelle `cig` e `ita_tenders`.
  *
- * La tabella `cato_tenders` ha un campo `codice_cpv` (codice numerico)
+ * La tabella `ita_tenders` ha un campo `codice_cpv` (codice numerico)
  * mentre la tabella `cig` ha solo `descrizione_cpv` (testo).
  */
 export async function POST(req: Request) {
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     const matches: MatchResult[] = []
     const seenCigs = new Set<string>()
 
-    // ── 1. Cerca su cato_tenders (matching preciso via codice_cpv) ──
+    // ── 1. Cerca su ita_tenders (matching preciso via codice_cpv) ──
     try {
       // Estrai solo i codici numerici CPV dalle descriptions
       const cpvCodes = cpv_codes
@@ -70,16 +70,16 @@ export async function POST(req: Request) {
         .filter(Boolean) as string[]
 
       if (cpvCodes.length > 0) {
-        const { data: catoData } = await supabase
-          .from("cato_tenders")
+        const { data: itaData } = await supabase
+          .from("ita_tenders")
           .select("id, oggetto, importo, provincia, data_scadenza, codice_cpv, cig, data_pubblicazione")
           .or(cpvCodes.map(c => `codice_cpv.ilike.%${c}%`).join(","))
           .order("data_scadenza", { ascending: true, nullsFirst: false })
           .limit(limit)
 
-        if (catoData) {
-          for (const row of catoData) {
-            const cigKey = row.cig || `cato:${row.id}`
+        if (itaData) {
+          for (const row of itaData) {
+            const cigKey = row.cig || `ita:${row.id}`
             if (seenCigs.has(cigKey)) continue
             seenCigs.add(cigKey)
 
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
         }
       }
     } catch (err) {
-      console.warn("[match] cato_tenders query error:", err)
+      console.warn("[match] ita_tenders query error:", err)
     }
 
     // ── 2. Cerca su cig (matching testo via descrizione_cpv) ──────

@@ -137,7 +137,7 @@ function parseItems(xmlText) {
   return items;
 }
 
-// ── Mapping item → bandolo_tenders ───────────────────────────────────────────
+// ── Mapping item → intl_tenders ───────────────────────────────────────────
 
 function mapRssItem(item, feed) {
   const pubblicazione = parseRssDate(item.pubDate);
@@ -160,7 +160,7 @@ function mapRssItem(item, feed) {
     settori:     null,
     source:      feed.source,
     link:        item.link ?? null,
-    bandolo_created_at: pubblicazione ? new Date(pubblicazione).toISOString() : null,
+    intl_created_at: pubblicazione ? new Date(pubblicazione).toISOString() : null,
     synced_at:   new Date().toISOString(),
   };
 }
@@ -208,7 +208,7 @@ async function syncFeed(feed) {
 
   if (!IS_DRY_RUN && records.length > 0) {
     const { error } = await supabase
-      .from("bandolo_tenders")
+      .from("intl_tenders")
       .upsert(records, { onConflict: "id", ignoreDuplicates: false });
     if (error) {
       console.log(`    ❌ Upsert error: ${error.message}`);

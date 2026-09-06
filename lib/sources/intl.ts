@@ -1,18 +1,16 @@
 /**
- * lib/sources/bandolo.ts
- * Adapter per Bandolo (getbandolo.com) — DB-backed
+ * lib/sources/intl.ts
+ * Adapter per fonti esterne — DB-backed
  *
- * Legge dalla tabella `bandolo_tenders` in Supabase, popolata da
- * scripts/sync-bandolo.mjs. Aggrega 1.096 fonti istituzionali:
- * incentivi.gov.it, invitalia.it, ted.europa.eu e altre.
+ * Legge dalla tabella `intl_tenders` in Supabase, popolata da
+ * script di sync dedicati (sync-boamp.mjs, sync-contracts-finder.mjs,
+ * sync-grants-gov.mjs, sync-ec-funding.mjs, sync-rss-feeds.mjs).
  *
  * ARCHITETTURA SOTTO-FONTI:
- * Come CATO, Bandolo è un aggregatore: ogni bando ha un campo `source`
- * con la fonte originale (es. "incentivi.gov.it", "inpa.gov.it").
+ * Ogni bando ha un campo `source` con la fonte originale.
  * Le sotto-fonti principali sono registrate in SourceKey e mostrate
- * come badge separati nell'UI — il badge "Bandolo" non esiste.
- * Le sotto-fonti non registrate vengono comunque mostrate usando
- * direttamente il valore raw del campo `source` come label.
+ * come badge separati nell'UI — il badge "INTL" è usato come
+ * fallback generico per fonti non registrate.
  */
 
 import type { NormalizedTender, SourceKey, SourceResult } from "./types"
@@ -26,38 +24,30 @@ const IMPORTO_RANGES: Record<string, { gte?: number; lte?: number }> = {
 }
 
 /**
- * Mappa sotto-fonte Bandolo → SourceKey registrata.
+ * Mappa sotto-fonte → SourceKey registrata.
  * Le chiavi qui devono esistere in SourceKey (lib/sources/types.ts).
- * Fonti non mappate useranno "bandolo" come fallback.
+ * Fonti non mappate useranno "intl" come fallback.
  */
-export const BANDOLO_SOURCE_MAP: Record<string, SourceKey> = {
-  // Vecchie sotto-fonti Bandolo
-  "incentivi.gov.it":       "incentivi_gov",
-  "invitalia.it":           "invitalia",
-  "inpa.gov.it":            "inpa_gov",
-  "concorsipubblici.com":   "concorsipubblici",
-  "euraxess.ec.europa.eu":  "euraxess",
-  "ted.europa.eu":          "ted_bandolo",
-  "untalent.org":           "untalent",
-  // Nuove fonti dirette
+export const INTL_SOURCE_MAP: Record<string, SourceKey> = {
+  // Fonti dirette con script di sync attivo
   "boamp":                  "boamp",
   "contracts-finder":       "contracts_finder",
   "grants.gov":             "grants_gov",
   "ec.europa.eu":           "ec_funding",
-  "reporter.nih.gov":       "nih_reporter",
-  "lazioeuropa.it":         "bandolo",
-  "regione.basilicata.it":  "bandolo",
-  "fondazioneconilsud.it":  "bandolo",
+  // RSS feeds italiani
+  "lazioeuropa.it":         "intl",
+  "regione.basilicata.it":  "intl",
+  "fondazioneconilsud.it":  "intl",
 }
 
 
-/** Inverso: SourceKey → valore raw del campo `source` in bandolo_tenders */
-export const BANDOLO_SOURCE_REVERSE: Partial<Record<SourceKey, string>> = {}
-for (const [raw, key] of Object.entries(BANDOLO_SOURCE_MAP)) {
-  BANDOLO_SOURCE_REVERSE[key] = raw
+/** Inverso: SourceKey → valore raw del campo `source` in intl_tenders */
+export const INTL_SOURCE_REVERSE: Partial<Record<SourceKey, string>> = {}
+for (const [raw, key] of Object.entries(INTL_SOURCE_MAP)) {
+  INTL_SOURCE_REVERSE[key] = raw
 }
 
-export interface BandoloFetchParams {
+export interface IntlFetchParams {
   q?:            string
   page?:         number
   pageSize?:     number
@@ -65,24 +55,24 @@ export interface BandoloFetchParams {
   scadenza?:     string
   pubblicazione?: string
   country?:      string
-  /** Sotto-fonte Bandolo (valore raw del campo source, es. "incentivi.gov.it") */
+  /** Sotto-fonte INTL (valore raw del campo source, es. "incentivi.gov.it") */
   subSource?:    string
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapBandoloRow(row: Record<string, any>): NormalizedTender {
-  // Usa la sotto-fonte registrata se disponibile, altrimenti "bandolo" come fallback
+function mapIntlRow(row: Record<string, any>): NormalizedTender {
+  // Usa la sotto-fonte registrata se disponibile, altrimenti "intl" come fallback
   const rawSource = row.source ?? "unknown"
-  const sourceKey = BANDOLO_SOURCE_MAP[rawSource] ?? "bandolo"
+  const sourceKey = INTL_SOURCE_MAP[rawSource] ?? "intl"
 
   return {
-    id:                  `bandolo:${row.id}`,
+    id:                  `intl:${row.id}`,
     cig:                 row.slug ?? String(row.id),
     oggetto:             row.titolo ?? null,
     importo:             row.importo_max != null ? Number(row.importo_max) : null,
     stato:               "active",
     provincia:           row.regione_richiesta ?? null,
-    data_pubblicazione:  row.bandolo_created_at ?? row.synced_at ?? null,
+    data_pubblicazione:  row.intl_created_at ?? row.synced_at ?? null,
     data_scadenza:       row.scadenza ?? null,
     tipo_contratto:      row.tender_type ?? null,
     descrizione_cpv:     row.settori ?? null,
@@ -112,13 +102,14 @@ function getPublicationCutoff(value: string): Date | null {
 }
 
 /**
- * Fetch Bandolo tenders from the local Supabase `bandolo_tenders` table.
- * Populated via `scripts/sync-bandolo.mjs`.
+ * Fetch tenders from the local Supabase `intl_tenders` table.
+ * Populated via sync-boamp.mjs, sync-contracts-finder.mjs,
+ * sync-grants-gov.mjs, sync-ec-funding.mjs, sync-rss-feeds.mjs.
  *
  * Returns null if the table doesn't exist or Supabase is not configured.
  */
-export async function fetchBandoloFromDB(
-  params: BandoloFetchParams,
+export async function fetchIntlFromDB(
+  params: IntlFetchParams,
   sourceKeyOverride?: SourceKey,
 ): Promise<SourceResult | null> {
   let createAdminClient: typeof import("@/lib/supabase/admin").createAdminClient
@@ -140,7 +131,7 @@ export async function fetchBandoloFromDB(
   const PAGE_SIZE = params.pageSize ?? 10
 
   let query = supabase
-    .from("bandolo_tenders")
+    .from("intl_tenders")
     .select("*", { count: "exact" })
 
   // Filter by sub-source (raw value in DB)
@@ -182,7 +173,7 @@ export async function fetchBandoloFromDB(
   if (pubblicazione) {
     const cutoff = getPublicationCutoff(pubblicazione)
     if (cutoff) {
-      query = query.gte("bandolo_created_at", cutoff.toISOString())
+      query = query.gte("intl_created_at", cutoff.toISOString())
     }
   }
 
@@ -197,7 +188,7 @@ export async function fetchBandoloFromDB(
   const { data, count, error } = await query
 
   if (error) {
-    console.warn("[fetchBandoloFromDB] Query error:", error.message)
+    console.warn("[fetchIntlFromDB] Query error:", error.message)
     return null
   }
 
@@ -205,11 +196,11 @@ export async function fetchBandoloFromDB(
     return null
   }
 
-  const items: NormalizedTender[] = (data ?? []).map(mapBandoloRow)
+  const items: NormalizedTender[] = (data ?? []).map(mapIntlRow)
 
   return {
     items,
     total:  count ?? items.length,
-    source: sourceKeyOverride ?? "bandolo",
+    source: sourceKeyOverride ?? "intl",
   }
 }

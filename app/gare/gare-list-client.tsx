@@ -62,7 +62,7 @@ const ALL_SOURCES: { value: SourceKey | "all"; label: string; flag?: string }[] 
   { value: "contracts_finder", label: "Contracts Finder (UK)",    flag: "🇬🇧" },
   { value: "grants_gov",       label: "Grants.gov (USA)",         flag: "🇺🇸" },
   { value: "ec_funding",       label: "EU Funding Portal",        flag: "🇪🇺" },
-  // Sotto-fonti CATO (piattaforme regionali italiane)
+  // Sotto-fonti ITA (piattaforme regionali italiane)
   { value: "sintel",       label: "Sintel",                 flag: "📡" },
   { value: "mepa",         label: "MePA",                   flag: "📡" },
   { value: "start_toscana", label: "Start Toscana",         flag: "📡" },
@@ -81,7 +81,7 @@ const ALL_SOURCES: { value: SourceKey | "all"; label: string; flag?: string }[] 
   { value: "empulia",          label: "EmPulia",                    flag: "📡" },
   { value: "soresa",           label: "SoReSa Campania",            flag: "📡" },
   { value: "efvg",             label: "Friuli Venezia Giulia",      flag: "📡" },
-  // Sotto-fonti CATO scoperte 2026-09-02 (multi-page scan API)
+  // Sotto-fonti ITA scoperte 2026-09-02 (multi-page scan API)
   { value: "esercito_difesa",  label: "Esercito / Difesa",          flag: "🪖" },
   { value: "jaggaer",          label: "Jaggaer",                    flag: "📡" },
   { value: "arpa_piemonte",    label: "ARPA Piemonte",              flag: "📡" },
@@ -702,7 +702,7 @@ export function GareListClient() {
   const isAllMode  = source === "all"
   // Fetch ANAC quando è selezionato "anac" O "tutte le fonti"
   const needAnac   = isAnacMode || isAllMode
-  // Fetch TED/CATO quando NON è "anac" (cioè "all", "ted", sotto-fonti CATO)
+  // Fetch TED/ITA quando NON è "anac" (cioè "all", "ted", sotto-fonti ITA)
   const needTenders = !isAnacMode
 
   // ── Query string per ANAC (Supabase /api/cig) ─────────────────────────────
@@ -755,7 +755,7 @@ export function GareListClient() {
     }))
   }, [anacData])
 
-  // ── Query string per /api/tenders (TED + CATO) ─────────────────────────────
+  // ── Query string per /api/tenders (TED + ITA) ─────────────────────────────
   const queryString = useMemo(() => {
     if (!needTenders) return ""  // non usato in modalità solo-ANAC
     const params = new URLSearchParams()
@@ -777,14 +777,14 @@ export function GareListClient() {
   )
 
   // ── Dati unificati ─────────────────────────────────────────────────────────
-  // In modalità "all": merge ANAC + TED/CATO con ordinamento per scadenza
+  // In modalità "all": merge ANAC + TED/ITA con ordinamento per scadenza
   const items: TenderItem[] = useMemo(() => {
     if (isAnacMode) return anacItems
     if (!isAllMode) return data?.items || []
-    // All mode: merge ANAC + TED/CATO
-    const tedCatoItems = data?.items || []
-    const merged = [...tedCatoItems, ...anacItems]
-    // Dedup per CIG (ANAC potrebbe avere stessi bandi di TED/CATO)
+    // All mode: merge ANAC + TED/ITA
+    const tedItaItems = data?.items || []
+    const merged = [...tedItaItems, ...anacItems]
+    // Dedup per CIG (ANAC potrebbe avere stessi bandi di TED/ITA)
     const seen = new Set<string>()
     const deduped = merged.filter(item => {
       const key = String(item.cig ?? item.id)
@@ -825,9 +825,9 @@ export function GareListClient() {
   }, [isAnacMode, isAllMode, anacItems, data?.items, scadenza])
 
   const isLoading = isAnacMode ? anacLoading : isAllMode ? (swrLoading || anacLoading) : swrLoading
-  // In all-mode: each API returns ~10 items per page (TED 10, Cato 10, Bandolo 10) + ANAC 20
+  // In all-mode: each API returns ~10 items per page (TED 10, ITA 10, INTL 10) + ANAC 20
   // Use server-side totals for the count, since pagination works server-side per source
-  const allModePageSize = 30  // TED(10) + Cato(10) + Bandolo(10) per page from /api/tenders
+  const allModePageSize = 30  // TED(10) + ITA(10) + INTL(10) per page from /api/tenders
   const pageSize  = isAnacMode ? 20 : isAllMode ? allModePageSize : 10
   const total     = isAnacMode
     ? (anacData?.count ?? 0)

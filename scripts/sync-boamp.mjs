@@ -92,7 +92,7 @@ function mapBoampRecord(rec) {
     settori,
     source:         "boamp",
     link,
-    bandolo_created_at: pubblicazione ? new Date(pubblicazione).toISOString() : null,
+    intl_created_at: pubblicazione ? new Date(pubblicazione).toISOString() : null,
     synced_at:      new Date().toISOString(),
   };
 }
@@ -226,7 +226,7 @@ async function main() {
       for (let i = 0; i < valid.length; i += UPSERT_BATCH) {
         const batch = valid.slice(i, i + UPSERT_BATCH);
         const { error } = await supabase
-          .from("bandolo_tenders")
+          .from("intl_tenders")
           .upsert(batch, { onConflict: "id", ignoreDuplicates: false });
         if (error) {
           console.error(`  ❌ Upsert error: ${error.message}`);
@@ -252,7 +252,7 @@ async function main() {
   if (!IS_DRY_RUN) {
     const todayStr = new Date().toISOString().slice(0, 10);
     const { count } = await supabase
-      .from("bandolo_tenders")
+      .from("intl_tenders")
       .delete({ count: "exact" })
       .eq("source", "boamp")
       .lt("scadenza", todayStr)

@@ -5,7 +5,7 @@
  * Tests every layer of the Tender AI DB system:
  *  1. Environment & Config
  *  2. Supabase Connectivity (anon + service role)
- *  3. Database Schema (cig + cato_tenders)
+ *  3. Database Schema (cig + ita_tenders)
  *  4. ANAC Bulk OCDS upstream (HEAD check)
  *  5. API Routes via dev server (if running)
  *  6. Business Logic (tenderLogic.ts)
@@ -184,28 +184,28 @@ if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
     fail("cig counts", e.message);
   }
 
-  // 3c. cato_tenders table
+  // 3c. ita_tenders table
   try {
-    const { data: catoSample, count: catoCount, error: catoErr } = await admin.from("cato_tenders")
+    const { data: itaSample, count: itaCount, error: itaErr } = await admin.from("ita_tenders")
       .select("id, oggetto, sources, importo, data_scadenza, provincia", { count: "exact" })
       .order("id", { ascending: false })
       .limit(3);
 
-    if (catoErr) {
-      if (catoErr.message.includes("does not exist") || catoErr.code === "42P01") {
-        warn("cato_tenders table", "Table does not exist (optional source)");
+    if (itaErr) {
+      if (itaErr.message.includes("does not exist") || itaErr.code === "42P01") {
+        warn("ita_tenders table", "Table does not exist (optional source)");
       } else {
-        fail("cato_tenders table read", catoErr.message);
+        fail("ita_tenders table read", itaErr.message);
       }
     } else {
-      pass("cato_tenders table read", `${catoCount} total rows, sample: ${catoSample.length} rows`);
-      if (catoSample.length > 0) {
-        const sources = [...new Set(catoSample.map(r => r.sources))];
-        info("cato_tenders sample sources", sources.join(", "));
+      pass("ita_tenders table read", `${itaCount} total rows, sample: ${itaSample.length} rows`);
+      if (itaSample.length > 0) {
+        const sources = [...new Set(itaSample.map(r => r.sources))];
+        info("ita_tenders sample sources", sources.join(", "));
       }
     }
   } catch (e) {
-    fail("cato_tenders table read", e.message);
+    fail("ita_tenders table read", e.message);
   }
 
   // 3d. Full-text search readiness
@@ -374,11 +374,11 @@ await testApi("/api/cig?q=servizi&page=1", "GET /api/cig?q=servizi", (body) => {
   }
 });
 
-await testApi("/api/tenders?source=cato", "GET /api/tenders?source=cato", (body) => {
+await testApi("/api/tenders?source=ita", "GET /api/tenders?source=ita", (body) => {
   if (Array.isArray(body.items)) {
-    pass("GET /api/tenders?source=cato", `items=${body.items.length}, total=${body.total}`);
+    pass("GET /api/tenders?source=ita", `items=${body.items.length}, total=${body.total}`);
   } else {
-    fail("GET /api/tenders?source=cato", `Unexpected shape: ${JSON.stringify(body).substring(0, 200)}`);
+    fail("GET /api/tenders?source=ita", `Unexpected shape: ${JSON.stringify(body).substring(0, 200)}`);
   }
 });
 
@@ -457,7 +457,7 @@ const criticalFiles = [
   "lib/supabase/database.types.ts",
   "lib/services/anacSync.ts",
   "lib/sources/anac.ts",
-  "lib/sources/cato.ts",
+  "lib/sources/ita.ts",
   "lib/sources/ted.ts",
   "lib/sources/types.ts",
   "lib/utils/tenderLogic.ts",

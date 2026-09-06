@@ -1,4 +1,4 @@
-name: "CATO Sync (daily)"
+name: "ITA Sync (daily)"
 
 on:
   schedule:
@@ -21,7 +21,7 @@ env:
 
 jobs:
   sync:
-    name: "Sync CATO tenders"
+    name: "Sync ITA tenders"
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -37,20 +37,20 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Run CATO sync
+      - name: Run ITA sync
         run: |
           if [ "${{ github.event.inputs.mode }}" = "full" ]; then
             echo "🔄 Running FULL sync..."
-            node scripts/sync-cato.mjs --full
+            node scripts/sync-ita.mjs --full
           else
             echo "🔄 Running INCREMENTAL sync..."
-            node scripts/sync-cato.mjs
+            node scripts/sync-ita.mjs
           fi
 
       - name: Report result
         if: always()
         run: |
-          if [ -f scripts/.sync-cato-state.json ]; then
+          if [ -f scripts/.sync-ita-state.json ]; then
             echo "📊 Sync state:"
-            cat scripts/.sync-cato-state.json
+            cat scripts/.sync-ita-state.json
           fi

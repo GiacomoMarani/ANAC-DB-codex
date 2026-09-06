@@ -51,7 +51,7 @@ function saveState(state) {
   writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
-// ── Mapping OCDS → bandolo_tenders ───────────────────────────────────────────
+// ── Mapping OCDS → intl_tenders ───────────────────────────────────────────
 
 function mapOcdsRelease(release) {
   const tender = release.tender ?? {};
@@ -92,7 +92,7 @@ function mapOcdsRelease(release) {
     settori:        cpv,
     source:         "contracts-finder",
     link,
-    bandolo_created_at: pubblicazione ? new Date(pubblicazione).toISOString() : null,
+    intl_created_at: pubblicazione ? new Date(pubblicazione).toISOString() : null,
     synced_at:      new Date().toISOString(),
   };
 }
@@ -217,7 +217,7 @@ async function main() {
       for (let i = 0; i < valid.length; i += UPSERT_BATCH) {
         const batch = valid.slice(i, i + UPSERT_BATCH);
         const { error } = await supabase
-          .from("bandolo_tenders")
+          .from("intl_tenders")
           .upsert(batch, { onConflict: "id", ignoreDuplicates: false });
         if (error) {
           console.error(`  ❌ Upsert error: ${error.message}`);
@@ -238,7 +238,7 @@ async function main() {
   // Cleanup scaduti
   if (!IS_DRY_RUN) {
     const { count } = await supabase
-      .from("bandolo_tenders")
+      .from("intl_tenders")
       .delete({ count: "exact" })
       .eq("source", "contracts-finder")
       .lt("scadenza", todayStr)

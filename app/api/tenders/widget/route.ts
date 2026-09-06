@@ -8,7 +8,7 @@
  */
 import { NextRequest, NextResponse } from "next/server"
 
-const CATO_WIDGET = "https://www.get-cato.com/api/tenders/widget"
+const ITA_WIDGET = "https://www.get-cato.com/api/tenders/widget"
 
 export async function GET(request: NextRequest) {
   const sp  = request.nextUrl.searchParams
@@ -16,15 +16,15 @@ export async function GET(request: NextRequest) {
   const kw  = sp.get("kw") ?? ""
   const q   = sp.get("q") ?? ""
 
-  const catoParams = new URLSearchParams()
-  if (cpv) catoParams.set("cpv", cpv)
-  if (kw)  catoParams.set("kw", kw)
-  if (q)   catoParams.set("q", q)
+  const itaParams = new URLSearchParams()
+  if (cpv) itaParams.set("cpv", cpv)
+  if (kw)  itaParams.set("kw", kw)
+  if (q)   itaParams.set("q", q)
 
-  const catoUrl = `${CATO_WIDGET}?${catoParams.toString()}`
+  const itaUrl = `${ITA_WIDGET}?${itaParams.toString()}`
 
   try {
-    const res = await fetch(catoUrl, {
+    const res = await fetch(itaUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/json",
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
         tipo_contratto: item.tipo_procedura ?? null,
         descrizione_cpv: (item.cpv_codes as string[] | undefined)?.join(", ") ?? null,
         provincia:      info.provincia ?? item.provincia ?? null,
-        sources:        item.source ?? "cato",
+        sources:        item.source ?? "ita",
         link_originale: item.original_url ?? null,
       }
     })

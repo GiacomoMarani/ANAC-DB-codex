@@ -27,4 +27,4 @@ yarn-error.log*
 next-env.d.ts
 
 # sync state
-scripts/.sync-cato-state.json
+scripts/.sync-ita-state.json

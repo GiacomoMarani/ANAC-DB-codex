@@ -52,7 +52,7 @@ export type Database = {
         }
         Relationships: []
       }
-      cato_tenders: {
+      ita_tenders: {
         Row: {
           id: number
           oggetto: string | null

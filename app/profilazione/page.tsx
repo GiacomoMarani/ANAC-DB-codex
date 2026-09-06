@@ -8,7 +8,7 @@
  * il profilo aziendale con codici CPV, storico gare, copertura territoriale
  * e matching istantaneo con i bandi attivi.
  *
- * Competitor (Bandolo/Cato) richiedono upload manuali di documenti.
+ * Competitor (INTL/ITA) richiedono upload manuali di documenti.
  * Noi estraiamo tutto automaticamente dallo storico ANAC.
  */
 

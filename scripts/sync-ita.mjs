@@ -1,20 +1,20 @@
 /**
- * sync-cato.mjs — Scrape all CATO tenders → Supabase
+ * sync-ita.mjs — Scrape all ITA tenders → Supabase
  *
- * The CATO API (get-cato.com/api/tenders) returns only 10 items per page
+ * The ITA API (get-cato.com/api/tenders) returns only 10 items per page
  * with no way to increase page size or filter by source server-side.
  * This script scrapes ALL pages and stores tenders in a dedicated Supabase
- * table `cato_tenders`, enabling instant SQL-based filtering.
+ * table `ita_tenders`, enabling instant SQL-based filtering.
  *
  * USAGE:
- *   node scripts/sync-cato.mjs                    → incremental (first 50 pages)
- *   node scripts/sync-cato.mjs --full             → full sync (all ~6700 pages)
- *   node scripts/sync-cato.mjs --pages 100        → custom page count
- *   node scripts/sync-cato.mjs --full --dry-run   → don't write to DB
+ *   node scripts/sync-ita.mjs                    → incremental (first 50 pages)
+ *   node scripts/sync-ita.mjs --full             → full sync (all ~6700 pages)
+ *   node scripts/sync-ita.mjs --pages 100        → custom page count
+ *   node scripts/sync-ita.mjs --full --dry-run   → don't write to DB
  *
  * SCHEDULING (Windows Task Scheduler):
  *   Programma: node
- *   Argomenti: scripts/sync-cato.mjs
+ *   Argomenti: scripts/sync-ita.mjs
  *   Inizio in: C:\...\ANAC-DB-codex
  *   Frequenza: ogni 6 ore (incremental)
  */
@@ -61,8 +61,8 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const CATO_BASE = "https://www.get-cato.com/api/tenders";
-const CATO_HEADERS = {
+const ITA_BASE = "https://www.get-cato.com/api/tenders";
+const ITA_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
   "Accept": "application/json",
   "Referer": "https://www.get-cato.com/gare",
@@ -91,7 +91,7 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;  // ms base delay for exponential backoff
 
 // State file for resume support
-const STATE_FILE = resolve(ROOT, "scripts/.sync-cato-state.json");
+const STATE_FILE = resolve(ROOT, "scripts/.sync-ita-state.json");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -103,14 +103,14 @@ function log(msg) {
 }
 
 /**
- * Fetch a single CATO page with retries and exponential backoff.
+ * Fetch a single ITA page with retries and exponential backoff.
  */
-async function fetchCatoPage(page, signal) {
+async function fetchItaPage(page, signal) {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const url = `${CATO_BASE}?p=${page}`;
+      const url = `${ITA_BASE}?p=${page}`;
       const res = await fetch(url, {
-        headers: CATO_HEADERS,
+        headers: ITA_HEADERS,
         signal,
       });
       if (res.status === 502 || res.status === 503 || res.status === 429) {
@@ -142,9 +142,9 @@ async function fetchCatoPage(page, signal) {
 }
 
 /**
- * Map a raw CATO item to the cato_tenders table schema.
+ * Map a raw ITA item to the ita_tenders table schema.
  */
-function mapCatoItem(item) {
+function mapItaItem(item) {
   const info = item.extracted_main_info ?? {};
 
   // Parse dates safely
@@ -154,7 +154,7 @@ function mapCatoItem(item) {
     return isNaN(d.getTime()) ? null : d.toISOString();
   };
 
-  // CIG extraction (same logic as cato.ts)
+  // CIG extraction (same logic as ita.ts)
   const isRealCig = (s) => typeof s === "string" && /^[A-Za-z0-9]{10}$/.test(s);
   const lotCig = info.cig?.[0]?.cig;
   const cig = isRealCig(lotCig) ? lotCig : (item.numero_gara ?? item.cig ?? null);
@@ -220,7 +220,7 @@ async function upsertBatch(records, stats) {
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
     const chunk = records.slice(i, i + BATCH_SIZE);
     const { error } = await supabase
-      .from("cato_tenders")
+      .from("ita_tenders")
       .upsert(chunk, { onConflict: "id" });
 
     if (error) {
@@ -239,7 +239,7 @@ async function main() {
   const startTime = Date.now();
 
   log("═══════════════════════════════════════════════════════════");
-  log(`  CATO Sync — ${IS_FULL ? "FULL" : "INCREMENTAL"} mode`);
+  log(`  ITA Sync — ${IS_FULL ? "FULL" : "INCREMENTAL"} mode`);
   log(`  Max pages: ${MAX_PAGES === Infinity ? "ALL" : MAX_PAGES}`);
   log(`  Dry run: ${IS_DRY_RUN}`);
   log(`  Parallel: ${PARALLEL}`);
@@ -255,9 +255,9 @@ async function main() {
   };
 
   // Determine total pages from first request
-  const firstPage = await fetchCatoPage(0);
+  const firstPage = await fetchItaPage(0);
   if (!firstPage || firstPage.items.length === 0) {
-    log("❌ Cannot fetch CATO API — aborting.");
+    log("❌ Cannot fetch ITA API — aborting.");
     process.exit(1);
   }
 
@@ -265,12 +265,12 @@ async function main() {
   const totalPages = Math.ceil(totalItems / 10);
   const pagesToScan = Math.min(MAX_PAGES, totalPages);
 
-  log(`📊 CATO total: ${totalItems} tenders across ${totalPages} pages`);
+  log(`📊 ITA total: ${totalItems} tenders across ${totalPages} pages`);
   log(`📄 Will scan: ${pagesToScan} pages (${pagesToScan * 10} items max)`);
   log("");
 
   // Process first page
-  const firstMapped = firstPage.items.map(mapCatoItem);
+  const firstMapped = firstPage.items.map(mapItaItem);
   stats.pagesScanned++;
   stats.itemsFetched += firstPage.items.length;
   for (const item of firstMapped) {
@@ -300,7 +300,7 @@ async function main() {
 
     // Fetch batch in parallel
     const results = await Promise.all(
-      batchPages.map(p => fetchCatoPage(p, controller.signal))
+      batchPages.map(p => fetchItaPage(p, controller.signal))
     );
 
     // Process results
@@ -314,7 +314,7 @@ async function main() {
       }
       stats.pagesScanned++;
       stats.itemsFetched += result.items.length;
-      const mapped = result.items.map(mapCatoItem);
+      const mapped = result.items.map(mapItaItem);
       for (const item of mapped) {
         stats.sourceCounts[item.sources] = (stats.sourceCounts[item.sources] || 0) + 1;
       }
