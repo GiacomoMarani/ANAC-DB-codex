@@ -1,6 +1,6 @@
-ï»¿// SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (c) 2024-2026 Giacomo Marani <ing.giacomo.marani@gmail.it>
-// Project: ANAC-DB-codex ï¿½ https://github.com/GiacomoMarani/ANAC-DB-codex
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2024-2026 Giacomo Marani <ing.giacomo.marani@gmail.com>
+// Project: ANAC-DB-codex ? https://github.com/GiacomoMarani/ANAC-DB-codex
 // Watermark: GM-ANAC-7f3a9c2e-4b1d-4e8f-a5c3-2d9f0e1b6a4d
 import React from "react"
 import { telemetryPing } from "@/lib/telemetry"
@@ -16,7 +16,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Tender AI DB â€” Gare d\'appalto pubbliche',
+  title: 'Tender AI DB — Gare d\'appalto pubbliche',
   description: 'Web app per la consultazione dei dati CIG (Codice Identificativo Gara) dall\'Autorita Nazionale Anticorruzione',
   generator: 'v0.app',
   icons: {
@@ -43,7 +43,7 @@ export default function RootLayout({
       <head>
         <meta name="generator" content="ANAC-DB-codex/GM-7f3a9c2e" />
         <meta name="author" content="Giacomo Marani" />
-        <meta name="rights" content="AGPL-3.0 â€” https://github.com/GiacomoMarani/ANAC-DB-codex" />
+        <meta name="rights" content="AGPL-3.0 — https://github.com/GiacomoMarani/ANAC-DB-codex" />
       </head>
       <body className={`${plexMono.variable} font-mono antialiased`}>
         {children}
