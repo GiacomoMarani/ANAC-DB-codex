@@ -43,20 +43,43 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Impossibile connettersi al database" }, { status: 503 })
       }
 
-      const searchTerm = ragioneSociale.trim()
-      const { data: found } = await supabase
+      // Normalizza: rimuovi punteggiatura, uppercase, splitta parole
+      const normalized = ragioneSociale.trim()
+        .toUpperCase()
+        .replace(/[.\-,'"]/g, " ")  // punteggiatura → spazi
+        .replace(/\s+/g, " ")        // spazi multipli → singolo
+        .trim()
+      const words = normalized.split(" ").filter((w: string) => w.length >= 2)
+
+      // Cerca con ogni parola come filtro ilike (AND logic)
+      let query = supabase
         .from("aggiudicatari")
         .select("codice_fiscale, denominazione")
-        .ilike("denominazione", `%${searchTerm}%`)
         .not("codice_fiscale", "is", null)
-        .limit(1)
+
+      for (const word of words.slice(0, 3)) {
+        query = query.ilike("denominazione", `%${word}%`)
+      }
+
+      const { data: found } = await query.limit(5)
 
       if (!found || found.length === 0) {
         return NextResponse.json(
-          { error: `Nessuna azienda trovata con ragione sociale "${searchTerm}". Prova con la Partita IVA.` },
+          { error: `Nessuna azienda trovata con ragione sociale "${ragioneSociale.trim()}". Prova con la Partita IVA.` },
           { status: 404 }
         )
       }
+
+      // Se ci sono più candidati, restituiscili per la selezione in UI
+      if (found.length > 1) {
+        return NextResponse.json({
+          candidates: found.map((r: { codice_fiscale: string; denominazione: string | null }) => ({
+            partita_iva: r.codice_fiscale,
+            denominazione: r.denominazione ?? r.codice_fiscale,
+          })),
+        })
+      }
+
       rawPiva = found[0].codice_fiscale
     }
 

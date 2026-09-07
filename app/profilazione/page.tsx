@@ -559,6 +559,7 @@ export default function ProfilazionePage() {
   const [searchMode, setSearchMode] = useState<SearchMode>("piva")
   const [historicalTenders, setHistoricalTenders] = useState<HistoricalTender[]>([])
   const [showHistorical, setShowHistorical] = useState(false)
+  const [candidates, setCandidates] = useState<{ partita_iva: string; denominazione: string }[]>([])
 
   // ── New interactive state ──
   const [selectedTender, setSelectedTender] = useState<TenderMatch | null>(null)
@@ -616,6 +617,7 @@ export default function ProfilazionePage() {
     setMatches([])
     setHistoricalTenders([])
     setShowHistorical(false)
+    setCandidates([])
     setSelectedTender(null)
     setExpandedCpv(null)
     setActiveProvinceFilter(null)
@@ -638,6 +640,14 @@ export default function ProfilazionePage() {
       }
 
       const data = await res.json()
+
+      // If API returned multiple candidates, show selection list
+      if (data.candidates && Array.isArray(data.candidates)) {
+        setCandidates(data.candidates)
+        setLoading(false)
+        return
+      }
+
       setProfile(data.profile)
 
       // Store historical tenders if returned
@@ -683,6 +693,47 @@ export default function ProfilazionePage() {
       setLoading(false)
     }
   }, [piva, isSearchValid, searchMode])
+
+  const handleSelectCandidate = useCallback((pivaSelected: string) => {
+    setCandidates([])
+    setPiva(pivaSelected)
+    setSearchMode("piva")
+    // Trigger analysis with selected P.IVA
+    setTimeout(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch("/api/profiling", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ partita_iva: pivaSelected }),
+        })
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}))
+          throw new Error(d.error || `Errore ${res.status}`)
+        }
+        const data = await res.json()
+        setProfile(data.profile)
+        if (data.recent_tenders) setHistoricalTenders(data.recent_tenders)
+        if (data.profile.cpv_codes.length > 0) {
+          setMatchesLoading(true)
+          try {
+            const matchRes = await fetch("/api/profiling/match", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ cpv_codes: data.profile.cpv_codes.map((c: CpvEntry) => c.code) }),
+            })
+            if (matchRes.ok) {
+              const matchData = await matchRes.json()
+              setMatches(matchData.matches || [])
+            }
+          } finally { setMatchesLoading(false) }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Errore sconosciuto")
+      } finally { setLoading(false) }
+    }, 0)
+  }, [])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -862,6 +913,41 @@ export default function ProfilazionePage() {
               >
                 ×
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Candidates Selection (multiple name matches) ── */}
+        {candidates.length > 0 && (
+          <div className="mb-6">
+            <div className="border rounded-xl overflow-hidden">
+              <div className="bg-foreground text-background px-4 sm:px-5 py-3">
+                <span className="text-sm font-semibold flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Seleziona l&apos;azienda
+                </span>
+                <span className="text-xs text-background/70 mt-0.5 block">
+                  Trovate {candidates.length} aziende corrispondenti. Seleziona quella corretta.
+                </span>
+              </div>
+              <div className="divide-y">
+                {candidates.map((c) => (
+                  <button
+                    key={c.partita_iva}
+                    onClick={() => handleSelectCandidate(c.partita_iva)}
+                    className="w-full px-4 sm:px-5 py-3 flex items-center justify-between gap-3 hover:bg-muted/40 transition-colors text-left cursor-pointer"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold truncate">{c.denominazione}</p>
+                      <p className="text-xs text-muted-foreground font-mono mt-0.5">P.IVA {c.partita_iva}</p>
+                    </div>
+                    <span className="text-xs font-medium text-primary shrink-0 flex items-center gap-1">
+                      Seleziona
+                      <ChevronRight className="h-3 w-3" />
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
