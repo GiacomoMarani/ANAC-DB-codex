@@ -55,7 +55,8 @@ export async function POST(req: NextRequest) {
     const payload = body.payload ?? buildAnacPayload({ inCorso: true, ...params })
 
     const agent = new Agent({
-      connect: { rejectUnauthorized: false },
+      connect: { // SECURITY NOTE: required for ANAC TLS — do NOT use elsewhere
+ rejectUnauthorized: false },
     })
 
     const requestHeaders: Record<string, string> = {

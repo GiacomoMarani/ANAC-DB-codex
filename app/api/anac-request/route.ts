@@ -19,7 +19,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { AnacFetchParams }      from "@/lib/sources/anac"
 
 const CORS = {
-  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Origin":  "https://tender-ai-db.vercel.app",
   "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 }

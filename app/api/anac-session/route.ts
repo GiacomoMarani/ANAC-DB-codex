@@ -65,7 +65,7 @@ export async function GET() {
 
   return NextResponse.json({
     active:    true,
-    csrf:      _anacSession.csrf,
+    // csrf: redacted for security (H5 fix)
     hasCookies: !!_anacSession.cookies,
     expiresAt: _anacSession.expiresAt,
   })

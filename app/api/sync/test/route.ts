@@ -81,7 +81,27 @@ async function* streamReleases(res: Response): AsyncGenerator<any> {
   } finally { reader.cancel().catch(() => {}) }
 }
 
+
+// ── Auth check (H4 security fix) ────────────────────────────────────────────
+function checkAuth(request: NextRequest): NextResponse | null {
+  const secret = process.env.CRON_SECRET
+  if (!secret) {
+    if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+      return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
+    }
+    return null
+  }
+  const auth = request.headers.get("authorization")
+  if (auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
+  }
+  return null
+}
+
 export async function GET(request: NextRequest) {
+  const authError = checkAuth(request)
+  if (authError) return authError
+
   const { searchParams } = request.nextUrl
   const now = new Date()
   const year = searchParams.get("year") ?? String(now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear())

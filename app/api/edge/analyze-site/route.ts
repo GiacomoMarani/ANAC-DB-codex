@@ -66,7 +66,33 @@ function guessCpvFromText(text: string): string[] {
   return [...new Set(matches)].slice(0, 3)
 }
 
+
+// ── SSRF protection (C3 security fix) ───────────────────────────────────────
+function isBlockedUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname.toLowerCase()
+    if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "[::1]") return true
+    if (host === "metadata.google.internal" || host === "metadata.google") return true
+    if (host.endsWith(".internal") || host.endsWith(".local")) return true
+    if (host === "169.254.169.254" || host === "169.254.170.2") return true
+    const ipMatch = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/)
+    if (ipMatch) {
+      const [, a, b] = ipMatch.map(Number)
+      if (a === 10) return true
+      if (a === 172 && b >= 16 && b <= 31) return true
+      if (a === 192 && b === 168) return true
+      if (a === 169 && b === 254) return true
+      if (a === 127) return true
+      if (a === 0) return true
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return true
+    return false
+  } catch { return true }
+}
+
 async function scrapeWebsite(url: string): Promise<string> {
+  if (isBlockedUrl(url)) return ""
   try {
     const res = await fetch(url, {
       headers: {
@@ -121,10 +147,10 @@ Testo del sito:
 ${text.slice(0, 3000)}`
 
   const apiRes = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.3, maxOutputTokens: 512 },

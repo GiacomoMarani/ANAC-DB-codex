@@ -15,7 +15,27 @@ const WINDOW = 512 * 1024  // 512KB window per scan
 
 export const maxDuration = 30
 
+
+// ── Auth check (H4 security fix) ────────────────────────────────────────────
+function checkAuth(request: NextRequest): NextResponse | null {
+  const secret = process.env.CRON_SECRET
+  if (!secret) {
+    if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+      return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
+    }
+    return null
+  }
+  const auth = request.headers.get("authorization")
+  if (auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
+  }
+  return null
+}
+
 export async function GET(request: NextRequest) {
+  const authError = checkAuth(request)
+  if (authError) return authError
+
   const mb = parseInt(request.nextUrl.searchParams.get("mb") ?? "0")
   const start = mb * 1024 * 1024
   const end = start + WINDOW - 1

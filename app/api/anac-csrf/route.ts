@@ -39,6 +39,8 @@ async function getServerSession(): Promise<{ cookies: string; csrf: string } | n
     // Usa undici con TLS options personalizzate
     const agent = new Agent({
       connect: {
+        // SECURITY NOTE: required for ANAC TLS — do NOT use elsewhere
+
         rejectUnauthorized: false,
         secureOptions: 0,
       },

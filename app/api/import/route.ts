@@ -4,8 +4,25 @@
 // Watermark: GM-ANAC-7f3a9c2e-4b1d-4e8f-a5c3-2d9f0e1b6a4d
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { Database } from "@/lib/supabase/database.types"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { isActiveTender } from "@/lib/utils/tenderLogic"
+
+
+// ── Auth check (C1 security fix) ────────────────────────────────────────────
+function checkAuth(request: NextRequest): NextResponse | null {
+  const secret = process.env.CRON_SECRET
+  if (!secret) {
+    if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+      return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
+    }
+    return null
+  }
+  const auth = request.headers.get("authorization")
+  if (auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 })
+  }
+  return null
+}
 
 interface CigRecord {
   cig: string
@@ -180,7 +197,10 @@ function normalizeRecord(record: CigRecord): CigInsert {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const authError = checkAuth(request)
+  if (authError) return authError
+
   try {
     const { records } = await request.json()
 
@@ -260,7 +280,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Import error:", error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Errore durante l'importazione" },
+      { error: "Errore durante l'importazione" },
       { status: 500 }
     )
   }
