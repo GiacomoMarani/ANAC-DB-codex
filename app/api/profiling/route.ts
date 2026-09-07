@@ -24,11 +24,45 @@ import type { ProfilingResponse } from "@/lib/utils/piva"
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const rawPiva = body.partita_iva
+    let rawPiva = body.partita_iva as string | undefined
+    const ragioneSociale = body.ragione_sociale as string | undefined
+
+    // Supporta ricerca per ragione sociale: cerca la P.IVA nell'archivio
+    if ((!rawPiva || rawPiva.trim() === "") && ragioneSociale && ragioneSociale.trim().length >= 3) {
+      let createAdminClient: typeof import("@/lib/supabase/admin").createAdminClient
+      try {
+        const mod = await import("@/lib/supabase/admin")
+        createAdminClient = mod.createAdminClient
+      } catch {
+        return NextResponse.json({ error: "Database non configurato" }, { status: 503 })
+      }
+      let supabase: ReturnType<typeof createAdminClient>
+      try {
+        supabase = createAdminClient()
+      } catch {
+        return NextResponse.json({ error: "Impossibile connettersi al database" }, { status: 503 })
+      }
+
+      const searchTerm = ragioneSociale.trim()
+      const { data: found } = await supabase
+        .from("aggiudicatari")
+        .select("codice_fiscale, denominazione")
+        .ilike("denominazione", `%${searchTerm}%`)
+        .not("codice_fiscale", "is", null)
+        .limit(1)
+
+      if (!found || found.length === 0) {
+        return NextResponse.json(
+          { error: `Nessuna azienda trovata con ragione sociale "${searchTerm}". Prova con la Partita IVA.` },
+          { status: 404 }
+        )
+      }
+      rawPiva = found[0].codice_fiscale
+    }
 
     if (!rawPiva || typeof rawPiva !== "string") {
       return NextResponse.json(
-        { error: "Il campo partita_iva è obbligatorio" },
+        { error: "Inserisci una Partita IVA o una ragione sociale" },
         { status: 400 }
       )
     }
@@ -319,8 +353,20 @@ export async function POST(req: Request) {
         ? Math.round((gareVinte / garePartecipate) * 100)
         : 0
 
+      // ── Lista gare aggiudicate (per la UI espandibile) ──────────
+      const recentTenders = aggiudicatariData.slice(0, 30).map((row: UnifiedAward) => ({
+        cig: row.cig || "N/D",
+        oggetto_gara: row.oggetto_gara || "Gara senza titolo",
+        importo: Number(row.importo_aggiudicazione) || null,
+        provincia: row.provincia || null,
+        descrizione_cpv: row.descrizione_cpv || row.codice_cpv || null,
+        data_aggiudicazione: row.data_aggiudicazione || null,
+        source: row.source || "local",
+      }))
+
       return NextResponse.json({
         profile,
+        recent_tenders: recentTenders,
         dataSource,
         sources: {
           local: dedupStats.localCount,

@@ -16,17 +16,24 @@
  * Noi estraiamo tutto automaticamente dallo storico ANAC.
  */
 
-import { useState, useCallback, useMemo, type ReactNode } from "react"
+import { useState, useCallback, useMemo, useRef, type ReactNode } from "react"
 import Link from "next/link"
 import { SiteNav } from "@/components/site-nav"
 import {
   Search, Loader2, Building2, MapPin, TrendingUp,
   FileText, ArrowRight, Copy, Check, BarChart3,
   ChevronRight, AlertCircle, Zap, Shield, Target,
+  ExternalLink, X, Eye, Filter,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter,
+} from "@/components/ui/sheet"
+import { Separator } from "@/components/ui/separator"
 import { isValidPartitaIva } from "@/lib/utils/piva"
+import { buildAnacCigUrl } from "@/lib/sources/types"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -88,6 +95,18 @@ interface TenderMatch {
   stato: string | null
 }
 
+interface HistoricalTender {
+  cig: string
+  oggetto_gara: string
+  importo: number | null
+  provincia: string | null
+  descrizione_cpv: string | null
+  data_aggiudicazione: string | null
+  source: string
+}
+
+type SearchMode = "piva" | "name"
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /** Validazione P.IVA lato client (formato 11 cifre e checksum Luhn) */
@@ -148,34 +167,105 @@ function StatCard({
   )
 }
 
-function CpvBar({ entry, maxCount }: { entry: CpvEntry; maxCount: number }) {
+function CpvBar({
+  entry, maxCount, isExpanded, onToggle, onScrollToBandi,
+}: {
+  entry: CpvEntry
+  maxCount: number
+  isExpanded: boolean
+  onToggle: () => void
+  onScrollToBandi: (cpvCode: string) => void
+}) {
   const width = maxCount > 0 ? (entry.count / maxCount) * 100 : 0
+  const [copied, setCopied] = useState(false)
+  const numericCode = entry.code.replace(/-\d+$/, "")
+
+  const handleCopy = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(numericCode)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }, [numericCode])
 
   return (
-    <div className="group py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <code className="text-xs font-mono text-primary font-semibold shrink-0">
-            {entry.code}
-          </code>
-          <span className="text-sm truncate" title={entry.description}>
-            {entry.description}
-          </span>
+    <div className="group">
+      <button
+        onClick={onToggle}
+        className="w-full text-left py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+      >
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <code className="text-xs font-mono text-primary font-semibold shrink-0">
+              {entry.code}
+            </code>
+            <span className="text-sm truncate" title={entry.description}>
+              {entry.description}
+            </span>
+            <ChevronRight className={`h-3 w-3 text-muted-foreground transition-transform duration-200 shrink-0 ${isExpanded ? "rotate-90" : ""}`} />
+          </div>
+          <div className="flex items-center gap-3 shrink-0 ml-3">
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {entry.count} {entry.count === 1 ? "gara" : "gare"}
+            </span>
+            <span className="text-xs font-semibold text-foreground tabular-nums w-10 text-right">
+              {entry.percentage.toFixed(0)}%
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0 ml-3">
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {entry.count} {entry.count === 1 ? "gara" : "gare"}
-          </span>
-          <span className="text-xs font-semibold text-foreground tabular-nums w-10 text-right">
-            {entry.percentage.toFixed(0)}%
-          </span>
+        <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+          <div
+            className="h-1.5 rounded-full bg-primary transition-all duration-700"
+            style={{ width: `${width}%` }}
+          />
         </div>
-      </div>
-      <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-        <div
-          className="h-1.5 rounded-full bg-primary transition-all duration-700"
-          style={{ width: `${width}%` }}
-        />
+      </button>
+
+      {/* Expandable detail panel */}
+      <div
+        className="grid transition-all duration-300 ease-in-out"
+        style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <div className="px-3 pb-3 pt-1 ml-4 border-l-2 border-primary/20">
+            <p className="text-sm text-muted-foreground mb-3 leading-relaxed">
+              {entry.description}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5 font-mono"
+                onClick={handleCopy}
+              >
+                {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                {copied ? "Copiato" : `Copia ${numericCode}`}
+              </Button>
+              <a
+                href={`/codici-cpv?q=${encodeURIComponent(numericCode)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md border text-xs font-medium hover:bg-muted transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Eye className="h-3 w-3" />
+                Gerarchia CPV
+                <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
+              </a>
+              <button
+                onClick={(e) => { e.stopPropagation(); onScrollToBandi(entry.code) }}
+                className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md border text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
+              >
+                <Search className="h-3 w-3" />
+                Bandi con questo CPV
+              </button>
+            </div>
+            {entry.total_value > 0 && (
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Volume totale: <strong className="text-foreground">{formatCurrency(entry.total_value)}</strong>
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -187,8 +277,10 @@ function DivisionChip({
   division: CpvDivision
 }) {
   return (
-    <Link
+    <a
       href={`/codici-cpv?q=${encodeURIComponent(division.label)}`}
+      target="_blank"
+      rel="noopener noreferrer"
       className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border bg-card hover:border-primary/50 hover:shadow-sm transition-all text-sm group"
     >
       <code className="text-xs font-mono text-primary font-bold">{division.division}</code>
@@ -198,16 +290,26 @@ function DivisionChip({
       <span className="text-xs text-muted-foreground tabular-nums">
         {division.percentage.toFixed(0)}%
       </span>
-      <ChevronRight className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
-    </Link>
+      <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
+    </a>
   )
 }
 
-function MatchCard({ tender }: { tender: TenderMatch }) {
+function MatchCard({
+  tender, onClick, onCpvClick, highlightedCpv,
+}: {
+  tender: TenderMatch
+  onClick: () => void
+  onCpvClick: (cpvCode: string) => void
+  highlightedCpv: string | null
+}) {
   const isExpired = tender.data_scadenza && new Date(tender.data_scadenza) < new Date()
 
   return (
-    <div className="border rounded-xl p-4 bg-card hover:shadow-sm transition-shadow">
+    <div
+      onClick={onClick}
+      className="border rounded-xl p-4 bg-card hover:shadow-md hover:border-primary/30 transition-all duration-200 cursor-pointer active:scale-[0.99] group/card"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1.5">
@@ -226,7 +328,7 @@ function MatchCard({ tender }: { tender: TenderMatch }) {
               <span className="text-[10px] text-rose-500 font-medium">Scaduto</span>
             )}
           </div>
-          <p className="text-sm font-medium leading-snug mb-1 line-clamp-2">
+          <p className="text-sm font-medium leading-snug mb-1 line-clamp-2 group-hover/card:text-primary transition-colors">
             {tender.oggetto_gara || "Bando senza titolo"}
           </p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -246,21 +348,199 @@ function MatchCard({ tender }: { tender: TenderMatch }) {
           {tender.cpv_match.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {tender.cpv_match.map((cpv) => (
-                <span
+                <button
                   key={cpv}
-                  className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono rounded bg-primary/10 text-primary"
+                  onClick={(e) => { e.stopPropagation(); onCpvClick(cpv) }}
+                  className={`
+                    inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono rounded
+                    transition-all duration-200 cursor-pointer
+                    ${highlightedCpv === cpv
+                      ? "bg-primary text-primary-foreground ring-2 ring-primary/30"
+                      : "bg-primary/10 text-primary hover:bg-primary/20"
+                    }
+                  `}
                 >
                   {cpv}
-                </span>
+                </button>
               ))}
             </div>
           )}
         </div>
-        <code className="text-[10px] text-muted-foreground font-mono shrink-0">
-          {tender.cig}
-        </code>
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <code className="text-[10px] text-muted-foreground font-mono">
+            {tender.cig}
+          </code>
+          <span className="text-[10px] text-primary font-medium opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center gap-1">
+            Dettaglio <ArrowRight className="h-2.5 w-2.5" />
+          </span>
+        </div>
       </div>
     </div>
+  )
+}
+// ─── Tender Detail Sheet ────────────────────────────────────────────────────
+
+function TenderDetailSheet({
+  tender, open, onOpenChange, onCpvClick, ragioneSociale,
+}: {
+  tender: TenderMatch | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCpvClick: (cpvCode: string) => void
+  ragioneSociale: string | null
+}) {
+  const [cigCopied, setCigCopied] = useState(false)
+
+  const handleCopyCig = useCallback(async () => {
+    if (!tender) return
+    await navigator.clipboard.writeText(tender.cig)
+    setCigCopied(true)
+    setTimeout(() => setCigCopied(false), 1500)
+  }, [tender])
+
+  if (!tender) return null
+
+  const isExpired = tender.data_scadenza && new Date(tender.data_scadenza) < new Date()
+  const anacUrl = buildAnacCigUrl(tender.cig)
+  const gareSearchUrl = `/gare?q=${encodeURIComponent(tender.oggetto_gara?.slice(0, 80) || tender.cig)}`
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader className="pb-4">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <Badge variant="outline" className="font-mono text-xs">
+              {tender.cig}
+            </Badge>
+            <span className={`
+              inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold
+              ${tender.score >= 70
+                ? "bg-emerald-500/15 text-emerald-700 border border-emerald-200"
+                : tender.score >= 40
+                ? "bg-amber-500/15 text-amber-700 border border-amber-200"
+                : "bg-muted text-muted-foreground border"
+              }
+            `}>
+              {tender.score}% match
+            </span>
+            {isExpired ? (
+              <Badge variant="destructive" className="text-[10px]">Scaduto</Badge>
+            ) : (
+              <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-200 text-[10px]">Attivo</Badge>
+            )}
+          </div>
+          <SheetTitle className="text-base leading-snug">
+            {tender.oggetto_gara || "Bando senza titolo"}
+          </SheetTitle>
+        </SheetHeader>
+
+        <div className="space-y-5 px-4 pb-4">
+          {/* Info grid */}
+          <div className="space-y-3">
+            {tender.importo != null && (
+              <div className="flex justify-between items-baseline py-2 border-b">
+                <span className="text-sm text-muted-foreground">Importo a base d&apos;asta</span>
+                <span className="text-sm font-semibold tabular-nums">{formatCurrency(tender.importo)}</span>
+              </div>
+            )}
+            {tender.provincia && (
+              <div className="flex justify-between items-baseline py-2 border-b">
+                <span className="text-sm text-muted-foreground">Provincia</span>
+                <span className="text-sm font-medium flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  {tender.provincia}
+                </span>
+              </div>
+            )}
+            {tender.data_scadenza && (
+              <div className="flex justify-between items-baseline py-2 border-b">
+                <span className="text-sm text-muted-foreground">Scadenza offerte</span>
+                <span className="text-sm font-medium">{formatDate(tender.data_scadenza)}</span>
+              </div>
+            )}
+            {tender.descrizione_cpv && (
+              <div className="py-2 border-b">
+                <span className="text-sm text-muted-foreground block mb-1">Classificazione CPV</span>
+                <span className="text-sm font-medium">{tender.descrizione_cpv}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Matching CPV codes */}
+          {tender.cpv_match.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                Codici CPV compatibili
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {tender.cpv_match.map((cpv) => (
+                  <button
+                    key={cpv}
+                    onClick={() => { onCpvClick(cpv); onOpenChange(false) }}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-mono rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                  >
+                    {cpv}
+                    <ChevronRight className="h-2.5 w-2.5" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Separator />
+
+          {/* Actions */}
+          <div className="space-y-2">
+            <a
+              href={anacUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 w-full px-4 py-2.5 rounded-lg border hover:bg-muted/50 transition-colors text-sm font-medium"
+            >
+              <ExternalLink className="h-4 w-4 text-primary" />
+              Visualizza su ANAC
+              <span className="text-muted-foreground text-xs ml-auto">dati.anticorruzione.it</span>
+            </a>
+            <a
+              href={gareSearchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 w-full px-4 py-2.5 rounded-lg border hover:bg-muted/50 transition-colors text-sm font-medium"
+            >
+              <Search className="h-4 w-4 text-primary" />
+              Cerca in Gare
+              <span className="text-muted-foreground text-xs ml-auto">tender-ai-db</span>
+            </a>
+            <button
+              onClick={handleCopyCig}
+              className="flex items-center gap-2 w-full px-4 py-2.5 rounded-lg border hover:bg-muted/50 transition-colors text-sm font-medium"
+            >
+              {cigCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4 text-muted-foreground" />}
+              {cigCopied ? "CIG copiato" : `Copia CIG ${tender.cig}`}
+            </button>
+          </div>
+
+          {/* Cross-link to company search in /gare */}
+          {ragioneSociale && (
+            <div className="rounded-lg bg-muted/30 border p-3">
+              <p className="text-xs text-muted-foreground mb-2">
+                Vuoi vedere tutte le gare di questa azienda?
+              </p>
+              <a
+                href={`/gare?q=${encodeURIComponent(ragioneSociale)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+              >
+                <Building2 className="h-3 w-3" />
+                Cerca &quot;{ragioneSociale}&quot; in Gare
+                <ExternalLink className="h-2.5 w-2.5" />
+              </a>
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -275,22 +555,81 @@ export default function ProfilazionePage() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
+  // ── Search mode: P.IVA o Ragione Sociale ──
+  const [searchMode, setSearchMode] = useState<SearchMode>("piva")
+  const [historicalTenders, setHistoricalTenders] = useState<HistoricalTender[]>([])
+  const [showHistorical, setShowHistorical] = useState(false)
+
+  // ── New interactive state ──
+  const [selectedTender, setSelectedTender] = useState<TenderMatch | null>(null)
+  const [expandedCpv, setExpandedCpv] = useState<string | null>(null)
+  const [activeProvinceFilter, setActiveProvinceFilter] = useState<string | null>(null)
+  const [highlightedCpv, setHighlightedCpv] = useState<string | null>(null)
+
+  // ── Refs for scroll-to-section ──
+  const cpvSectionRef = useRef<HTMLDivElement>(null)
+  const bandiSectionRef = useRef<HTMLDivElement>(null)
+
   const isValid = useMemo(() => isValidPivaFormat(piva), [piva])
+  const isSearchValid = useMemo(() => {
+    if (searchMode === "piva") return isValid
+    return piva.trim().length >= 3 // ragione sociale min 3 caratteri
+  }, [searchMode, piva, isValid])
+
+  // ── Filtered matches (by province) ──
+  const filteredMatches = useMemo(() => {
+    if (!activeProvinceFilter) return matches
+    return matches.filter(
+      (m) => m.provincia && m.provincia.toUpperCase() === activeProvinceFilter.toUpperCase()
+    )
+  }, [matches, activeProvinceFilter])
+
+  // ── Scroll to CPV section and highlight ──
+  const handleScrollToCpv = useCallback((cpvCode: string) => {
+    setHighlightedCpv(cpvCode)
+    cpvSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    // Auto-expand the matching CPV entry
+    setExpandedCpv(cpvCode)
+    // Clear highlight after animation
+    setTimeout(() => setHighlightedCpv(null), 2000)
+  }, [])
+
+  // ── Scroll to bandi section with optional CPV filter visual ──
+  const handleScrollToBandi = useCallback((cpvCode: string) => {
+    bandiSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    setHighlightedCpv(cpvCode)
+    setTimeout(() => setHighlightedCpv(null), 2000)
+  }, [])
+
+  // ── Province filter handler ──
+  const handleProvinceClick = useCallback((provinceName: string) => {
+    setActiveProvinceFilter((prev) => prev === provinceName ? null : provinceName)
+    bandiSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [])
 
   const handleAnalyze = useCallback(async () => {
-    if (!isValid) return
+    if (!isSearchValid) return
 
-    const cleanPiva = piva.replace(/[\s\-\.]/g, "")
     setLoading(true)
     setError(null)
     setProfile(null)
     setMatches([])
+    setHistoricalTenders([])
+    setShowHistorical(false)
+    setSelectedTender(null)
+    setExpandedCpv(null)
+    setActiveProvinceFilter(null)
+    setHighlightedCpv(null)
 
     try {
+      const requestBody = searchMode === "piva"
+        ? { partita_iva: piva.replace(/[\s\-\.]/g, "") }
+        : { ragione_sociale: piva.trim() }
+
       const res = await fetch("/api/profiling", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partita_iva: cleanPiva }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!res.ok) {
@@ -300,6 +639,17 @@ export default function ProfilazionePage() {
 
       const data = await res.json()
       setProfile(data.profile)
+
+      // Store historical tenders if returned
+      if (data.recent_tenders && Array.isArray(data.recent_tenders)) {
+        setHistoricalTenders(data.recent_tenders)
+      }
+
+      // If searched by name, update input to the found P.IVA for future reference
+      if (searchMode === "name" && data.profile?.partita_iva) {
+        setPiva(data.profile.partita_iva)
+        setSearchMode("piva")
+      }
 
       // Auto-fetch matching tenders if we have CPV codes
       if (data.profile.cpv_codes.length > 0) {
@@ -332,7 +682,7 @@ export default function ProfilazionePage() {
     } finally {
       setLoading(false)
     }
-  }, [piva, isValid])
+  }, [piva, isSearchValid, searchMode])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -421,24 +771,51 @@ export default function ProfilazionePage() {
           <div className="bg-foreground text-background px-4 sm:px-5 py-3 flex items-center justify-between">
             <span className="text-sm font-semibold flex items-center gap-2">
               <Search className="h-4 w-4" />
-              Inserisci la Partita IVA
+              Cerca azienda
             </span>
+            {/* Mode toggle */}
+            <div className="flex items-center gap-1 bg-background/10 rounded-lg p-0.5">
+              <button
+                onClick={() => { setSearchMode("piva"); setPiva("") }}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                  searchMode === "piva"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-background/70 hover:text-background"
+                }`}
+              >
+                P.IVA
+              </button>
+              <button
+                onClick={() => { setSearchMode("name"); setPiva("") }}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                  searchMode === "name"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-background/70 hover:text-background"
+                }`}
+              >
+                Ragione Sociale
+              </button>
+            </div>
           </div>
           <div className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
               <div className="flex-1 relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                {searchMode === "piva" ? (
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                )}
                 <Input
                   type="text"
-                  inputMode="numeric"
-                  maxLength={13}
+                  inputMode={searchMode === "piva" ? "numeric" : "text"}
+                  maxLength={searchMode === "piva" ? 13 : 100}
                   value={piva}
                   onChange={(e) => setPiva(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Es. 12345678901"
-                  className="pl-10 h-12 text-base font-mono tracking-wider"
+                  placeholder={searchMode === "piva" ? "Es. 12345678901" : "Es. TIM S.P.A."}
+                  className={`pl-10 h-12 text-base ${searchMode === "piva" ? "font-mono tracking-wider" : ""}`}
                 />
-                {piva && !isValid && (
+                {searchMode === "piva" && piva && !isValid && (
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-rose-500 font-medium">
                     {piva.replace(/[\s\-\.]/g, "").length !== 11 ? "11 cifre richieste" : "Checksum non valido"}
                   </span>
@@ -446,7 +823,7 @@ export default function ProfilazionePage() {
               </div>
               <Button
                 onClick={handleAnalyze}
-                disabled={loading || !isValid}
+                disabled={loading || !isSearchValid}
                 className="h-12 px-6 text-sm font-medium gap-2"
               >
                 {loading ? (
@@ -463,8 +840,10 @@ export default function ProfilazionePage() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-3 max-w-2xl">
-              La Partita IVA viene usata per cercare lo storico appalti pubblici
-              dall&apos;ANAC. I dati sono pubblici e non vengono memorizzati.
+              {searchMode === "piva"
+                ? "La Partita IVA viene usata per cercare lo storico appalti pubblici dall\u2019ANAC. I dati sono pubblici e non vengono memorizzati."
+                : "Inserisci il nome dell\u2019azienda (almeno 3 caratteri). Cercheremo la Partita IVA nell\u2019archivio gare ANAC."
+              }
             </p>
           </div>
         </div>
@@ -592,21 +971,122 @@ export default function ProfilazionePage() {
               </div>
             </section>
 
+            {/* ── Section 1.5: Storico Gare Aggiudicate (espandibile) ── */}
+            {historicalTenders.length > 0 && (
+              <section className="border rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setShowHistorical(!showHistorical)}
+                  className="w-full bg-foreground text-background px-4 sm:px-5 py-3 flex items-center justify-between cursor-pointer hover:bg-foreground/90 transition-colors"
+                >
+                  <span className="text-sm font-semibold flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Storico gare aggiudicate
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-background/70">
+                      {historicalTenders.length} gare
+                    </span>
+                    <ChevronRight className={`h-4 w-4 text-background/70 transition-transform duration-200 ${showHistorical ? "rotate-90" : ""}`} />
+                  </span>
+                </button>
+
+                {/* Preview: always show first 3 */}
+                {!showHistorical && (
+                  <div className="divide-y">
+                    {historicalTenders.slice(0, 3).map((tender) => (
+                      <div key={tender.cig} className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3 text-sm">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{tender.oggetto_gara}</p>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                            <code className="font-mono text-[10px]">{tender.cig}</code>
+                            {tender.provincia && (
+                              <span className="flex items-center gap-1">
+                                <MapPin className="h-2.5 w-2.5" />
+                                {tender.provincia}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {tender.importo != null && (
+                          <span className="text-xs font-semibold tabular-nums shrink-0">{formatCurrency(tender.importo)}</span>
+                        )}
+                      </div>
+                    ))}
+                    {historicalTenders.length > 3 && (
+                      <button
+                        onClick={() => setShowHistorical(true)}
+                        className="w-full px-4 py-2.5 text-xs text-primary font-medium hover:bg-muted/30 transition-colors flex items-center justify-center gap-1"
+                      >
+                        Mostra tutte le {historicalTenders.length} gare
+                        <ChevronRight className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Expanded: show all */}
+                {showHistorical && (
+                  <div className="divide-y max-h-[60vh] overflow-y-auto">
+                    {historicalTenders.map((tender, i) => (
+                      <div key={`${tender.cig}-${i}`} className="px-4 sm:px-5 py-3 hover:bg-muted/30 transition-colors">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium leading-snug mb-1">{tender.oggetto_gara}</p>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                              <code className="font-mono text-[10px]">{tender.cig}</code>
+                              {tender.provincia && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="h-2.5 w-2.5" />
+                                  {tender.provincia}
+                                </span>
+                              )}
+                              {tender.data_aggiudicazione && (
+                                <span>{formatDate(tender.data_aggiudicazione)}</span>
+                              )}
+                              {tender.descrizione_cpv && (
+                                <span className="truncate max-w-[200px]" title={tender.descrizione_cpv}>
+                                  CPV: {tender.descrizione_cpv}
+                                </span>
+                              )}
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                {tender.source === "scp_mit" ? "SCP/MIT" : tender.source === "ted" ? "TED" : "ANAC"}
+                              </Badge>
+                            </div>
+                          </div>
+                          {tender.importo != null && (
+                            <span className="text-sm font-semibold tabular-nums shrink-0">{formatCurrency(tender.importo)}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setShowHistorical(false)}
+                      className="w-full px-4 py-2.5 text-xs text-muted-foreground font-medium hover:bg-muted/30 transition-colors flex items-center justify-center gap-1 sticky bottom-0 bg-background border-t"
+                    >
+                      Comprimi lista
+                      <ChevronRight className="h-3 w-3 -rotate-90" />
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
             {/* ── Section 2: CPV Strategy Map ── */}
             {profile.cpv_codes.length > 0 && (
-              <section className="border rounded-xl overflow-hidden">
+              <section ref={cpvSectionRef} className="border rounded-xl overflow-hidden">
                 <div className="bg-foreground text-background px-4 sm:px-5 py-3 flex items-center justify-between">
                   <span className="text-sm font-semibold flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" />
                     CPV Strategy Map
                   </span>
-                  <Link
+                  <a
                     href="/codici-cpv"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="flex items-center gap-1 text-xs text-background/70 hover:text-background transition-colors"
                   >
                     Esplora tutti i CPV
-                    <ArrowRight className="h-3 w-3" />
-                  </Link>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
                 </div>
                 <div className="p-4 sm:p-6">
                   {/* Divisions overview */}
@@ -627,10 +1107,18 @@ export default function ProfilazionePage() {
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                       Codici CPV dettagliati ({profile.cpv_codes.length})
+                      <span className="normal-case font-normal ml-2 text-muted-foreground/70">— clicca per espandere</span>
                     </h3>
                     <div className="divide-y">
                       {profile.cpv_codes.slice(0, 15).map((cpv) => (
-                        <CpvBar key={cpv.code} entry={cpv} maxCount={maxCpvCount} />
+                        <CpvBar
+                          key={cpv.code}
+                          entry={cpv}
+                          maxCount={maxCpvCount}
+                          isExpanded={expandedCpv === cpv.code}
+                          onToggle={() => setExpandedCpv(expandedCpv === cpv.code ? null : cpv.code)}
+                          onScrollToBandi={handleScrollToBandi}
+                        />
                       ))}
                     </div>
                     {profile.cpv_codes.length > 15 && (
@@ -656,21 +1144,43 @@ export default function ProfilazionePage() {
                       </span>
                     </div>
                     <div className="p-4 sm:p-5">
-                      <div className="space-y-2">
-                        {profile.province.slice(0, 10).map((p) => (
-                          <div
-                            key={p.name}
-                            className="flex items-center justify-between py-1.5 text-sm"
-                          >
-                            <span className="flex items-center gap-2">
-                              <MapPin className="h-3 w-3 text-muted-foreground" />
-                              {p.name}
-                            </span>
-                            <span className="text-xs text-muted-foreground tabular-nums">
-                              {p.count} {p.count === 1 ? "gara" : "gare"}
-                            </span>
-                          </div>
-                        ))}
+                      <p className="text-[10px] text-muted-foreground mb-3">Clicca una provincia per filtrare i bandi compatibili</p>
+                      <div className="space-y-1">
+                        {profile.province.slice(0, 10).map((p) => {
+                          const isActive = activeProvinceFilter === p.name
+                          const matchingBandi = matches.filter(
+                            (m) => m.provincia && m.provincia.toUpperCase() === p.name.toUpperCase()
+                          ).length
+                          return (
+                            <button
+                              key={p.name}
+                              onClick={() => handleProvinceClick(p.name)}
+                              className={`
+                                flex items-center justify-between py-2 px-2.5 text-sm w-full rounded-lg
+                                transition-all duration-200 cursor-pointer text-left
+                                ${isActive
+                                  ? "bg-primary/10 ring-2 ring-primary/40 border-primary/20"
+                                  : "hover:bg-muted/50"
+                                }
+                              `}
+                            >
+                              <span className="flex items-center gap-2">
+                                <MapPin className={`h-3 w-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                                <span className={isActive ? "font-medium text-primary" : ""}>{p.name}</span>
+                              </span>
+                              <span className="flex items-center gap-2">
+                                {matchingBandi > 0 && (
+                                  <span className="text-[10px] text-primary font-medium px-1.5 py-0.5 rounded bg-primary/10">
+                                    {matchingBandi} bandi
+                                  </span>
+                                )}
+                                <span className="text-xs text-muted-foreground tabular-nums">
+                                  {p.count} {p.count === 1 ? "gara" : "gare"}
+                                </span>
+                              </span>
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
                   </section>
@@ -711,19 +1221,40 @@ export default function ProfilazionePage() {
             )}
 
             {/* ── Section 4: Bandi Compatibili ── */}
-            <section className="border rounded-xl overflow-hidden">
+            <section ref={bandiSectionRef} className="border rounded-xl overflow-hidden">
               <div className="bg-foreground text-background px-4 sm:px-5 py-3 flex items-center justify-between">
                 <span className="text-sm font-semibold flex items-center gap-2">
                   <Target className="h-4 w-4" />
                   Bandi Compatibili
                 </span>
-                {matches.length > 0 && (
-                  <span className="text-xs text-background/70">
-                    {matches.length} bandi trovati
-                  </span>
-                )}
+                <span className="text-xs text-background/70">
+                  {activeProvinceFilter
+                    ? `${filteredMatches.length} di ${matches.length} bandi`
+                    : matches.length > 0
+                    ? `${matches.length} bandi trovati`
+                    : null
+                  }
+                </span>
               </div>
               <div className="p-4 sm:p-6">
+                {/* Province filter badge */}
+                {activeProvinceFilter && (
+                  <div className="flex items-center gap-2 mb-4 pb-3 border-b">
+                    <Filter className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-xs text-muted-foreground">Filtro attivo:</span>
+                    <Badge variant="outline" className="gap-1 text-xs">
+                      <MapPin className="h-2.5 w-2.5" />
+                      {activeProvinceFilter}
+                      <button
+                        onClick={() => setActiveProvinceFilter(null)}
+                        className="ml-1 rounded-full hover:bg-muted p-0.5 transition-colors"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </Badge>
+                  </div>
+                )}
+
                 {matchesLoading ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -731,11 +1262,30 @@ export default function ProfilazionePage() {
                       Ricerca bandi compatibili...
                     </span>
                   </div>
-                ) : matches.length > 0 ? (
+                ) : filteredMatches.length > 0 ? (
                   <div className="space-y-3">
-                    {matches.map((tender) => (
-                      <MatchCard key={tender.cig} tender={tender} />
+                    {filteredMatches.map((tender) => (
+                      <MatchCard
+                        key={tender.cig}
+                        tender={tender}
+                        onClick={() => setSelectedTender(tender)}
+                        onCpvClick={handleScrollToCpv}
+                        highlightedCpv={highlightedCpv}
+                      />
                     ))}
+                  </div>
+                ) : activeProvinceFilter && matches.length > 0 ? (
+                  <div className="text-center py-12">
+                    <Filter className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Nessun bando nella provincia di {activeProvinceFilter}
+                    </p>
+                    <button
+                      onClick={() => setActiveProvinceFilter(null)}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Rimuovi filtro e mostra tutti i {matches.length} bandi
+                    </button>
                   </div>
                 ) : profile.cpv_codes.length === 0 ? (
                   <div className="text-center py-12">
@@ -745,9 +1295,9 @@ export default function ProfilazionePage() {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Questa P.IVA potrebbe non avere gare pubbliche registrate su ANAC.{" "}
-                      <Link href="/codici-cpv" className="text-primary hover:underline">
+                      <a href="/codici-cpv" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                         Esplora i codici CPV manualmente
-                      </Link>
+                      </a>
                     </p>
                   </div>
                 ) : (
@@ -760,6 +1310,43 @@ export default function ProfilazionePage() {
                 )}
               </div>
             </section>
+
+            {/* ── Quick Actions Bar ── */}
+            {matches.length > 0 && (
+              <div className="flex flex-col sm:flex-row gap-3">
+                {profile.ragione_sociale && (
+                  <a
+                    href={`/gare?q=${encodeURIComponent(profile.ragione_sociale)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border bg-card hover:border-primary/40 hover:shadow-sm transition-all text-sm font-medium group"
+                  >
+                    <Search className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    Cerca tutte le gare di {profile.ragione_sociale}
+                    <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                  </a>
+                )}
+                <a
+                  href="/ricerca-gare"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border bg-card hover:border-primary/40 hover:shadow-sm transition-all text-sm font-medium group"
+                >
+                  <Zap className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  Analisi avanzata
+                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                </a>
+              </div>
+            )}
+
+            {/* ── Tender Detail Sheet ── */}
+            <TenderDetailSheet
+              tender={selectedTender}
+              open={selectedTender !== null}
+              onOpenChange={(open) => { if (!open) setSelectedTender(null) }}
+              onCpvClick={handleScrollToCpv}
+              ragioneSociale={profile.ragione_sociale}
+            />
 
             {/* ── Empty state hint ── */}
             {profile.totale_gare === 0 && (
