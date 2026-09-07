@@ -563,7 +563,7 @@ export default function ProfilazionePage() {
                     label="Tasso successo"
                     value={`${profile.tasso_successo ?? 0}%`}
                     icon={<Target className="h-4 w-4" />}
-                    accent="violet"
+                    accent="primary"
                   />
                   <StatCard
                     label="Volume totale"
