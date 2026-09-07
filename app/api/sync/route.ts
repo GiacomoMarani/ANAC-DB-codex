@@ -10,7 +10,13 @@ export const maxDuration = 300
 
 function checkAuth(request: NextRequest): NextResponse | null {
   const secret = process.env.CRON_SECRET
-  if (!secret) return null // no secret configured = allow (dev mode)
+  if (!secret) {
+    // In production, require CRON_SECRET to prevent unauthenticated access to sync
+    if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+      return NextResponse.json({ error: "CRON_SECRET non configurato" }, { status: 503 })
+    }
+    return null // dev mode: allow without auth
+  }
   const auth = request.headers.get("authorization")
   if (auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -77,9 +83,17 @@ export async function GET(request: NextRequest) {
     const result = await syncMonth(months[0])
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error"
+    const isWaf = msg.includes("403") || msg.includes("WAF") || msg.includes("rejected")
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : "Unknown error" },
-      { status: 500 }
+      {
+        ok: false,
+        error: isWaf
+          ? "ANAC WAF sta bloccando le richieste da questo server. Usa /api/cron/sync-anac-pvl come alternativa."
+          : msg,
+        hint: isWaf ? "Il cron PVL (/api/cron/sync-anac-pvl) è la fonte di sincronizzazione primaria." : undefined,
+      },
+      { status: isWaf ? 502 : 500 }
     )
   }
 }

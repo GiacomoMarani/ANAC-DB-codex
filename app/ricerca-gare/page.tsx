@@ -439,9 +439,9 @@ export default function RicercaGarePage() {
               {reportSent ? (
                 <div className="text-center py-8">
                   <CheckCircle2 className="h-12 w-12 text-primary mx-auto mb-4" />
-                  <p className="font-semibold text-lg">Funzionalità in arrivo!</p>
+                  <p className="font-semibold text-lg">Richiesta ricevuta!</p>
                   <p className="text-muted-foreground text-sm mt-2">
-                    I report via email saranno disponibili a breve. Nel frattempo, puoi consultare tutti i bandi nella sezione{" "}
+                    I report personalizzati via email saranno disponibili a breve. Nel frattempo, puoi consultare tutti i bandi nella sezione{" "}
                     <Link href="/gare" className="text-primary hover:underline">Gare →</Link>
                   </p>
                 </div>
@@ -461,7 +461,7 @@ export default function RicercaGarePage() {
                       <label className="text-sm font-medium mb-1 block" htmlFor="report-email">Email aziendale</label>
                       <Input id="report-email" type="email" placeholder="nome@azienda.it" value={reportForm.email} onChange={e => setReportForm(f => ({ ...f, email: e.target.value }))} />
                     </div>
-                    <Button className="w-full" id="btn-ricevi-report" onClick={() => { if (reportForm.email) setReportSent(true) }}>
+                    <Button className="w-full" id="btn-ricevi-report" onClick={() => { if (reportForm.email) { console.info("[Lead]", JSON.stringify({ nome: reportForm.nome, cognome: reportForm.cognome, email: reportForm.email, tenderId: reportModalId, ts: new Date().toISOString() })); setReportSent(true) } }}>
                       Ricevi il report →
                     </Button>
                     <p className="text-center text-xs text-muted-foreground">Gratuito · Nessun impegno · In ~5 minuti</p>

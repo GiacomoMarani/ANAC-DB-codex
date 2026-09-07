@@ -81,6 +81,10 @@ async function scrapeWebsite(url: string): Promise<string> {
     return html
       .replace(/<script[\s\S]*?<\/script>/gi, "")
       .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+      .replace(/<header[\s\S]*?<\/header>/gi, "")
+      .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+      .replace(/<aside[\s\S]*?<\/aside>/gi, "")
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim()

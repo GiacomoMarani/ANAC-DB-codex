@@ -15,7 +15,13 @@ const PAGE_SIZE = 100
 
 function checkAuth(request: NextRequest): NextResponse | null {
   const secret = process.env.CRON_SECRET
-  if (!secret) return null
+  if (!secret) {
+    // In production, require CRON_SECRET to prevent unauthenticated access to sync
+    if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+      return NextResponse.json({ error: "CRON_SECRET non configurato" }, { status: 503 })
+    }
+    return null // dev mode: allow without auth
+  }
   const auth = request.headers.get("authorization")
   if (auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

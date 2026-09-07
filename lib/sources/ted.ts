@@ -70,11 +70,12 @@ function extractLang(obj: Record<string, string[]> | string[] | string | null | 
   )
 }
 
-/** Unwrap un valore TED che può essere stringa, array di stringhe, o null */
+/** Unwrap un valore TED che può essere stringa, array di stringhe, oggetto multilingua, o null */
 function unwrapTedValue(val: unknown): string | null {
   if (val == null) return null
   if (typeof val === "string") return val
   if (Array.isArray(val)) return val[0] ?? null
+  if (typeof val === "object") return extractLang(val as Record<string, string[]>)
   return String(val)
 }
 

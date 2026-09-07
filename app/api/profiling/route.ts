@@ -361,37 +361,6 @@ export async function POST(req: Request) {
 
 // ─── Helper functions ────────────────────────────────────────────────────────
 
-/**
- * Parse il campo descrizione_cpv per estrarre codice e descrizione.
- * Formato atteso: "72210000-7 - Servizi di programmazione"
- * oppure: "Servizi informatici" (solo testo)
- */
-function parseCpvField(raw: string): { code: string; description: string } {
-  const trimmed = raw.trim()
-
-  // Pattern: codice numerico (con eventuale suffisso -N) seguito da separatore e descrizione
-  const match = trimmed.match(/^(\d{8}(?:-\d)?)\s*[-–—]\s*(.+)$/)
-  if (match) {
-    return { code: match[1], description: match[2].trim() }
-  }
-
-  // Pattern: solo codice numerico
-  if (/^\d{8}(-\d)?$/.test(trimmed)) {
-    return { code: trimmed, description: trimmed }
-  }
-
-  // Solo testo descrittivo — usa un hash come chiave
-  return { code: `TXT_${simpleHash(trimmed)}`, description: trimmed }
-}
-
-function simpleHash(s: string): string {
-  let h = 0
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) & 0x7fffffff
-  }
-  return h.toString(36).substring(0, 6)
-}
-
 /** Normalizza il tipo di contratto ANAC/OCDS */
 function normalizeContractType(raw: string): string | null {
   const upper = raw.toUpperCase().trim()

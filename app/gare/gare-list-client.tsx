@@ -884,7 +884,10 @@ export function GareListClient() {
     : isAllMode
       ? ((data?.total ?? 0) + (anacData?.count ?? 0))
       : (data?.total ?? 0)
-  const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0
+  // In all-mode: use the max of the two sources' page counts to avoid missing items
+  const totalPages = isAllMode
+    ? Math.max(anacData?.totalPages ?? 0, Math.ceil((data?.total ?? 0) / allModePageSize))
+    : total > 0 ? Math.ceil(total / pageSize) : 0
 
   const resetFilters = useCallback(() => {
     setSearch(""); setTipo(""); setImporto(""); setScadenza(""); setPubblicazione(""); setSource("all"); setCpv(""); setPage(0)

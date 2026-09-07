@@ -63,6 +63,9 @@ interface CompanyProfile {
   regione: string | null
   totale_gare: number
   gare_vinte: number
+  gare_partecipate: number
+  tasso_successo: number
+  gare_non_aggiudicate: number
   importo_totale: number
   importo_medio: number
   prima_gara: string | null
@@ -543,7 +546,7 @@ export default function ProfilazionePage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   <StatCard
                     label="Gare totali"
                     value={profile.totale_gare.toLocaleString("it-IT")}
@@ -555,6 +558,12 @@ export default function ProfilazionePage() {
                     value={profile.gare_vinte.toLocaleString("it-IT")}
                     icon={<TrendingUp className="h-4 w-4" />}
                     accent="emerald"
+                  />
+                  <StatCard
+                    label="Tasso successo"
+                    value={`${profile.tasso_successo ?? 0}%`}
+                    icon={<Target className="h-4 w-4" />}
+                    accent="violet"
                   />
                   <StatCard
                     label="Volume totale"

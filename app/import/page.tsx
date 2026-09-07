@@ -56,21 +56,40 @@ export default function ImportPage() {
     setError(null)
 
     try {
-      const text = await file.text()
-      const lines = text.trim().split("\n")
-      
-      // Parse JSON Lines format (each line is a JSON object)
+      // Stream the file line by line to avoid OOM on large files (500MB+)
+      const reader = file.stream().getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
       const records: Record<string, unknown>[] = []
-      for (const line of lines) {
-        if (line.trim()) {
-          try {
-            const parsed = JSON.parse(line)
-            if (isActiveTender(parsed)) {
-              records.push(parsed)
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || "" // keep incomplete last line in buffer
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const parsed = JSON.parse(line)
+              if (isActiveTender(parsed)) {
+                records.push(parsed)
+              }
+            } catch {
+              console.error("Failed to parse line:", line.substring(0, 100))
             }
-          } catch {
-            console.error("Failed to parse line:", line.substring(0, 100))
           }
+        }
+      }
+      // Process remaining buffer
+      if (buffer.trim()) {
+        try {
+          const parsed = JSON.parse(buffer)
+          if (isActiveTender(parsed)) {
+            records.push(parsed)
+          }
+        } catch {
+          console.error("Failed to parse final line:", buffer.substring(0, 100))
         }
       }
 
