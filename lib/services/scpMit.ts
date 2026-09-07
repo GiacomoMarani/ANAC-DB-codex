@@ -211,3 +211,70 @@ export async function lookupScpMit(partitaIva: string): Promise<{
 
   return { records, total: records.length, source: "scp_mit" }
 }
+
+/**
+ * Cerca aggiudicazioni per ragione sociale (nome azienda) nella banca dati SCP/MIT.
+ * Usa il parametro `q` della CKAN API per full-text search.
+ * Restituisce i candidati trovati con P.IVA e denominazione per la selezione.
+ */
+export async function searchScpMitByName(companyName: string): Promise<{
+  candidates: { partita_iva: string; denominazione: string }[]
+  records: ScpAggiudicazione[]
+}> {
+  const cleanName = companyName.trim().replace(/[.,'"]/g, " ").replace(/\s+/g, " ").trim()
+  if (cleanName.length < 3) return { candidates: [], records: [] }
+
+  // Search only post-2020 resource for speed (most relevant data)
+  const url = `${MIT_BASE}?resource_id=${ESITI_POST_2020}&q=${encodeURIComponent(cleanName)}&limit=50`
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "ANAC-DB-Codex/1.0",
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+
+    if (!res.ok) {
+      console.warn(`[SCP/MIT] Name search HTTP ${res.status}`)
+      return { candidates: [], records: [] }
+    }
+
+    const data = (await res.json()) as CkanResponse
+    if (!data.success || !data.result?.records) {
+      return { candidates: [], records: [] }
+    }
+
+    // Normalize and deduplicate records
+    const seen = new Set<string>()
+    const records: ScpAggiudicazione[] = []
+    const cfMap = new Map<string, string>()
+
+    for (const raw of data.result.records) {
+      const normalized = normalizeRecord(raw)
+      if (!normalized) continue
+
+      const key = `${normalized.codice_fiscale}:${normalized.cig}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      records.push(normalized)
+
+      // Track unique P.IVA → denominazione for candidate list
+      if (!cfMap.has(normalized.codice_fiscale) && normalized.denominazione) {
+        cfMap.set(normalized.codice_fiscale, normalized.denominazione)
+      }
+    }
+
+    const candidates = [...cfMap.entries()].map(([piva, denom]) => ({
+      partita_iva: piva,
+      denominazione: denom,
+    }))
+
+    return { candidates, records }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`[SCP/MIT] Name search failed: ${msg}`)
+    return { candidates: [], records: [] }
+  }
+}

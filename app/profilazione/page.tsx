@@ -105,9 +105,13 @@ interface HistoricalTender {
   source: string
 }
 
-type SearchMode = "piva" | "name"
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/** Auto-detect: l'input è una P.IVA/CF (numerico) o una ragione sociale (testo)? */
+function detectIsNumeric(input: string): boolean {
+  const cleaned = input.trim().replace(/[\s\-\.]/g, "")
+  return /^(?:IT)?\d{6,16}$/i.test(cleaned)
+}
 
 /** Validazione P.IVA lato client (formato 11 cifre e checksum Luhn) */
 function isValidPivaFormat(piva: string): boolean {
@@ -555,8 +559,6 @@ export default function ProfilazionePage() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
-  // ── Search mode: P.IVA o Ragione Sociale ──
-  const [searchMode, setSearchMode] = useState<SearchMode>("piva")
   const [historicalTenders, setHistoricalTenders] = useState<HistoricalTender[]>([])
   const [showHistorical, setShowHistorical] = useState(false)
   const [candidates, setCandidates] = useState<{ partita_iva: string; denominazione: string }[]>([])
@@ -571,11 +573,13 @@ export default function ProfilazionePage() {
   const cpvSectionRef = useRef<HTMLDivElement>(null)
   const bandiSectionRef = useRef<HTMLDivElement>(null)
 
+  // ── Auto-detection: P.IVA/CF (numerico) o ragione sociale (testo) ──
+  const isNumericInput = useMemo(() => detectIsNumeric(piva), [piva])
   const isValid = useMemo(() => isValidPivaFormat(piva), [piva])
   const isSearchValid = useMemo(() => {
-    if (searchMode === "piva") return isValid
+    if (isNumericInput) return piva.trim().replace(/[\s\-\.]/g, "").replace(/^IT/i, "").length >= 6
     return piva.trim().length >= 3 // ragione sociale min 3 caratteri
-  }, [searchMode, piva, isValid])
+  }, [isNumericInput, piva])
 
   // ── Filtered matches (by province) ──
   const filteredMatches = useMemo(() => {
@@ -624,14 +628,11 @@ export default function ProfilazionePage() {
     setHighlightedCpv(null)
 
     try {
-      const requestBody = searchMode === "piva"
-        ? { partita_iva: piva.replace(/[\s\-\.]/g, "") }
-        : { ragione_sociale: piva.trim() }
-
+      // Unified query: backend auto-detects P.IVA vs ragione sociale
       const res = await fetch("/api/profiling", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ query: piva.trim() }),
       })
 
       if (!res.ok) {
@@ -655,12 +656,6 @@ export default function ProfilazionePage() {
         setHistoricalTenders(data.recent_tenders)
       }
 
-      // If searched by name, update input to the found P.IVA for future reference
-      if (searchMode === "name" && data.profile?.partita_iva) {
-        setPiva(data.profile.partita_iva)
-        setSearchMode("piva")
-      }
-
       // Auto-fetch matching tenders if we have CPV codes
       if (data.profile.cpv_codes.length > 0) {
         setMatchesLoading(true)
@@ -679,8 +674,6 @@ export default function ProfilazionePage() {
             setMatches(matchData.matches || [])
           }
         } catch (matchErr) {
-          // Log the error so it's traceable; matches are optional but the user
-          // should know if the API failed rather than seeing "no results"
           console.warn("Errore nel recupero dei bandi compatibili:", matchErr)
           setMatches([])
         } finally {
@@ -692,12 +685,11 @@ export default function ProfilazionePage() {
     } finally {
       setLoading(false)
     }
-  }, [piva, isSearchValid, searchMode])
+  }, [piva, isSearchValid])
 
   const handleSelectCandidate = useCallback((pivaSelected: string) => {
     setCandidates([])
     setPiva(pivaSelected)
-    setSearchMode("piva")
     // Trigger analysis with selected P.IVA
     setTimeout(async () => {
       setLoading(true)
@@ -706,7 +698,7 @@ export default function ProfilazionePage() {
         const res = await fetch("/api/profiling", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ partita_iva: pivaSelected }),
+          body: JSON.stringify({ query: pivaSelected }),
         })
         if (!res.ok) {
           const d = await res.json().catch(() => ({}))
@@ -783,9 +775,9 @@ export default function ProfilazionePage() {
             </h1>
 
             <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-[52ch]">
-              Inserisci una Partita IVA e ottieni in pochi secondi il profilo
-              completo: codici CPV, storico appalti, copertura territoriale e
-              bandi compatibili.
+              Inserisci una Partita IVA o il nome dell&apos;azienda e ottieni in
+              pochi secondi il profilo completo: codici CPV, storico appalti,
+              copertura territoriale e bandi compatibili.
             </p>
 
             {/* Stat chips */}
@@ -825,50 +817,23 @@ export default function ProfilazionePage() {
               Cerca azienda
             </span>
             {/* Mode toggle */}
-            <div className="flex items-center gap-1 bg-background/10 rounded-lg p-0.5">
-              <button
-                onClick={() => { setSearchMode("piva"); setPiva("") }}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                  searchMode === "piva"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-background/70 hover:text-background"
-                }`}
-              >
-                P.IVA
-              </button>
-              <button
-                onClick={() => { setSearchMode("name"); setPiva("") }}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                  searchMode === "name"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-background/70 hover:text-background"
-                }`}
-              >
-                Ragione Sociale
-              </button>
-            </div>
           </div>
           <div className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
               <div className="flex-1 relative">
-                {searchMode === "piva" ? (
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                )}
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
-                  inputMode={searchMode === "piva" ? "numeric" : "text"}
-                  maxLength={searchMode === "piva" ? 13 : 100}
+                  maxLength={100}
                   value={piva}
                   onChange={(e) => setPiva(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={searchMode === "piva" ? "Es. 12345678901" : "Es. TIM S.P.A."}
-                  className={`pl-10 h-12 text-base ${searchMode === "piva" ? "font-mono tracking-wider" : ""}`}
+                  placeholder="Inserisci P.IVA o Ragione Sociale"
+                  className={`pl-10 h-12 text-base ${isNumericInput ? "font-mono tracking-wider" : ""}`}
                 />
-                {searchMode === "piva" && piva && !isValid && (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-rose-500 font-medium">
-                    {piva.replace(/[\s\-\.]/g, "").length !== 11 ? "11 cifre richieste" : "Checksum non valido"}
+                {isNumericInput && piva && !isValid && piva.replace(/[\s\-\.]/g, "").replace(/^IT/i, "").length >= 11 && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-amber-500 font-medium">
+                    Checksum P.IVA non valido — potrebbe essere un CF
                   </span>
                 )}
               </div>
@@ -891,10 +856,8 @@ export default function ProfilazionePage() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-3 max-w-2xl">
-              {searchMode === "piva"
-                ? "La Partita IVA viene usata per cercare lo storico appalti pubblici dall\u2019ANAC. I dati sono pubblici e non vengono memorizzati."
-                : "Inserisci il nome dell\u2019azienda (almeno 3 caratteri). Cercheremo la Partita IVA nell\u2019archivio gare ANAC."
-              }
+              Inserisci una Partita IVA, un Codice Fiscale o il nome dell&apos;azienda.
+              I dati vengono cercati nell&apos;archivio ANAC, nella banca dati SCP/MIT e sul TED europeo.
             </p>
           </div>
         </div>
@@ -1477,8 +1440,8 @@ export default function ProfilazionePage() {
               Profilazione Aziendale Istantanea
             </h2>
             <p className="text-muted-foreground mb-6 max-w-lg mx-auto leading-relaxed">
-              Inserisci una Partita IVA per ottenere il profilo completo
-              dell&apos;azienda: codici CPV, storico appalti, copertura
+              Inserisci una Partita IVA o il nome dell&apos;azienda per ottenere
+              il profilo completo: codici CPV, storico appalti, copertura
               territoriale e bandi compatibili.
             </p>
             <div className="flex flex-wrap justify-center gap-4 text-[11px] text-muted-foreground">

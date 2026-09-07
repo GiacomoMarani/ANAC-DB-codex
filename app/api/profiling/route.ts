@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server"
 import { isValidPartitaIva, formatPartitaIva } from "@/lib/utils/piva"
 import { lookupVies } from "@/lib/utils/vies"
-import { lookupScpMit, type ScpAggiudicazione } from "@/lib/services/scpMit"
+import { lookupScpMit, searchScpMitByName, type ScpAggiudicazione } from "@/lib/services/scpMit"
 import { lookupTedAwards, type TedAward } from "@/lib/services/tedAwards"
 import { deduplicateAwards, type UnifiedAward } from "@/lib/utils/dedupAwards"
 import type { ProfilingResponse } from "@/lib/utils/piva"
@@ -24,10 +24,33 @@ import type { ProfilingResponse } from "@/lib/utils/piva"
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    let rawPiva = body.partita_iva as string | undefined
-    const ragioneSociale = body.ragione_sociale as string | undefined
+    // Unified search: accept `query` field (auto-detect P.IVA vs name)
+    // Backward compatibility: also accept `partita_iva` and `ragione_sociale`
+    const rawQuery = (body.query || body.partita_iva || "") as string
+    const rawRagioneSociale = body.ragione_sociale as string | undefined
 
-    // Supporta ricerca per ragione sociale: cerca la P.IVA nell'archivio
+    // Auto-detect: if the input is numeric (optionally prefixed with IT), treat as P.IVA
+    const cleanedQuery = rawQuery.trim().replace(/[\s\-\.]/g, "")
+    const isNumericQuery = /^(?:IT)?\d{6,16}$/i.test(cleanedQuery)
+
+    let rawPiva: string | undefined = undefined
+    let ragioneSociale: string | undefined = rawRagioneSociale
+
+    if (isNumericQuery) {
+      // Strip "IT" prefix if present
+      rawPiva = cleanedQuery.replace(/^IT/i, "")
+    } else if (rawQuery.trim().length >= 3) {
+      ragioneSociale = ragioneSociale || rawQuery.trim()
+    } else if (rawRagioneSociale && rawRagioneSociale.trim().length >= 3) {
+      // backward compat: ragione_sociale field was sent separately
+    } else if (rawQuery.trim().length > 0) {
+      return NextResponse.json(
+        { error: "Inserisci almeno 3 caratteri per cercare per nome, oppure una Partita IVA/CF." },
+        { status: 400 }
+      )
+    }
+
+    // Supporta ricerca per ragione sociale: cerca la P.IVA nell'archivio locale + SCP/MIT live
     if ((!rawPiva || rawPiva.trim() === "") && ragioneSociale && ragioneSociale.trim().length >= 3) {
       let createAdminClient: typeof import("@/lib/supabase/admin").createAdminClient
       try {
@@ -51,36 +74,70 @@ export async function POST(req: Request) {
         .trim()
       const words = normalized.split(" ").filter((w: string) => w.length >= 2)
 
-      // Cerca con ogni parola come filtro ilike (AND logic)
-      let query = supabase
-        .from("aggiudicatari")
-        .select("codice_fiscale, denominazione")
-        .not("codice_fiscale", "is", null)
+      // Cerca in parallelo: DB locale (aggiudicatari + partecipanti) + SCP/MIT live
+      const localSearchPromise = (async () => {
+        // Search aggiudicatari
+        let query1 = supabase
+          .from("aggiudicatari")
+          .select("codice_fiscale, denominazione")
+          .not("codice_fiscale", "is", null)
+        for (const word of words.slice(0, 3)) {
+          query1 = query1.ilike("denominazione", `%${word}%`)
+        }
+        const { data: fromAgg } = await query1.limit(10)
 
-      for (const word of words.slice(0, 3)) {
-        query = query.ilike("denominazione", `%${word}%`)
+        // Search partecipanti
+        let query2 = supabase
+          .from("partecipanti")
+          .select("codice_fiscale, denominazione")
+          .not("codice_fiscale", "is", null)
+        for (const word of words.slice(0, 3)) {
+          query2 = query2.ilike("denominazione", `%${word}%`)
+        }
+        const { data: fromPart } = await query2.limit(10)
+
+        return [...(fromAgg || []), ...(fromPart || [])]
+      })()
+
+      const scpNamePromise = searchScpMitByName(ragioneSociale.trim()).catch((err) => {
+        console.warn("[profiling] SCP/MIT name search error:", err)
+        return { candidates: [] as { partita_iva: string; denominazione: string }[], records: [] }
+      })
+
+      const [localFound, scpNameResult] = await Promise.all([localSearchPromise, scpNamePromise])
+
+      // Merge and deduplicate by codice_fiscale
+      const cfMap = new Map<string, string>()
+      for (const r of localFound) {
+        if (r.codice_fiscale && !cfMap.has(r.codice_fiscale)) {
+          cfMap.set(r.codice_fiscale, r.denominazione ?? r.codice_fiscale)
+        }
+      }
+      for (const c of scpNameResult.candidates) {
+        if (!cfMap.has(c.partita_iva)) {
+          cfMap.set(c.partita_iva, c.denominazione)
+        }
       }
 
-      const { data: found } = await query.limit(5)
-
-      if (!found || found.length === 0) {
+      if (cfMap.size === 0) {
         return NextResponse.json(
-          { error: `Nessuna azienda trovata con ragione sociale "${ragioneSociale.trim()}". Prova con la Partita IVA.` },
+          { error: `Nessuna azienda trovata per "${ragioneSociale.trim()}". Prova con la Partita IVA.` },
           { status: 404 }
         )
       }
 
       // Se ci sono più candidati, restituiscili per la selezione in UI
-      if (found.length > 1) {
+      if (cfMap.size > 1) {
         return NextResponse.json({
-          candidates: found.map((r: { codice_fiscale: string; denominazione: string | null }) => ({
-            partita_iva: r.codice_fiscale,
-            denominazione: r.denominazione ?? r.codice_fiscale,
+          candidates: [...cfMap.entries()].map(([piva, denom]) => ({
+            partita_iva: piva,
+            denominazione: denom,
           })),
         })
       }
 
-      rawPiva = found[0].codice_fiscale
+      // Unico risultato: usa direttamente la P.IVA trovata
+      rawPiva = [...cfMap.keys()][0]
     }
 
     if (!rawPiva || typeof rawPiva !== "string") {
@@ -92,12 +149,17 @@ export async function POST(req: Request) {
 
     const piva = formatPartitaIva(rawPiva)
 
-    if (!isValidPartitaIva(piva)) {
+    // Accept both P.IVA (11 digits) and Codice Fiscale (16 alphanumeric chars)
+    const isCF16 = /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/i.test(rawPiva.trim())
+    if (!isCF16 && !isValidPartitaIva(piva)) {
       return NextResponse.json(
-        { error: "Partita IVA non valida. Deve essere composta da 11 cifre con checksum corretto." },
+        { error: "Partita IVA non valida. Deve essere composta da 11 cifre con checksum corretto, oppure un Codice Fiscale a 16 caratteri." },
         { status: 400 }
       )
     }
+
+    // For CF16, use the raw value (uppercase, trimmed) instead of the digit-only formatted version
+    const lookupKey = isCF16 ? rawPiva.trim().toUpperCase() : piva
 
     // Dynamic import: handle missing Supabase gracefully
     let createAdminClient: typeof import("@/lib/supabase/admin").createAdminClient
@@ -128,14 +190,14 @@ export async function POST(req: Request) {
     // 4. TED Europa (live) → Gare sopra-soglia europea e appalti internazionali
 
     // Avvia VIES, query locale e SCP/MIT in parallelo
-    const viesPromise = lookupVies(piva)
+    const viesPromise = isCF16 ? Promise.resolve({ name: null, sede: null, regione: null, valid: false }) : lookupVies(piva)
 
     const localPromise = (async () => {
       try {
         const { data } = await supabase
           .from("aggiudicatari")
           .select("codice_fiscale, denominazione, cig, importo_aggiudicazione, data_aggiudicazione, codice_cpv, descrizione_cpv, oggetto_gara, provincia, ruolo")
-          .eq("codice_fiscale", piva)
+          .eq("codice_fiscale", lookupKey)
           .order("data_aggiudicazione", { ascending: false })
           .limit(500)
         return data && data.length > 0 ? data : []
@@ -144,7 +206,7 @@ export async function POST(req: Request) {
       }
     })()
 
-    const scpPromise = lookupScpMit(piva).catch((err) => {
+    const scpPromise = lookupScpMit(lookupKey).catch((err) => {
       console.warn("[profiling] SCP/MIT lookup error:", err)
       return { records: [], total: 0 }
     })
@@ -155,7 +217,7 @@ export async function POST(req: Request) {
         const { data } = await supabase
           .from("partecipanti")
           .select("cig, codice_cpv, oggetto_gara, provincia")
-          .eq("codice_fiscale", piva)
+          .eq("codice_fiscale", lookupKey)
           .limit(2000)
         return data && data.length > 0 ? data : []
       } catch {
@@ -211,7 +273,7 @@ export async function POST(req: Request) {
       })),
       tedAwards: tedAwards.map((r) => ({
         ...r,
-        codice_fiscale: piva,
+        codice_fiscale: lookupKey,
         source: "ted" as const,
       })),
     })
@@ -231,7 +293,7 @@ export async function POST(req: Request) {
 
     // ── Inizializza profilo con dati VIES reali ────────────────────
     const profile: ProfilingResponse["profile"] = {
-      partita_iva: piva,
+      partita_iva: lookupKey,
       ragione_sociale: viesResult.name,
       sede: viesResult.sede,
       regione: viesResult.regione,
