@@ -163,6 +163,51 @@ export type Database = {
         }
         Relationships: []
       }
+      partecipanti: {
+        Row: {
+          id: number
+          codice_fiscale: string
+          denominazione: string | null
+          tipo_soggetto: string | null
+          cig: string
+          ruolo: string | null
+          id_aggiudicazione: string | null
+          codice_cpv: string | null
+          descrizione_cpv: string | null
+          oggetto_gara: string | null
+          provincia: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: number
+          codice_fiscale: string
+          denominazione?: string | null
+          tipo_soggetto?: string | null
+          cig: string
+          ruolo?: string | null
+          id_aggiudicazione?: string | null
+          codice_cpv?: string | null
+          descrizione_cpv?: string | null
+          oggetto_gara?: string | null
+          provincia?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: number
+          codice_fiscale?: string
+          denominazione?: string | null
+          tipo_soggetto?: string | null
+          cig?: string
+          ruolo?: string | null
+          id_aggiudicazione?: string | null
+          codice_cpv?: string | null
+          descrizione_cpv?: string | null
+          oggetto_gara?: string | null
+          provincia?: string | null
+          created_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

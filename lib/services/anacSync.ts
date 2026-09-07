@@ -88,6 +88,22 @@ interface OcdsRelease {
     numberOfTenderers?: number
     procurementMethod?: string
     procurementMethodDetails?: string
+    tenderers?: Array<{
+      name?: string
+      id?: string
+      identifier?: {
+        id?: string              // Codice fiscale / P.IVA del partecipante
+        scheme?: string          // "IT-CF" o "IT-PIVA"
+        legalName?: string
+      }
+      address?: {
+        region?: string
+        locality?: string
+      }
+      details?: {
+        scale?: string           // "micro", "small", "medium", "large"
+      }
+    }>
   }
   awards?: Array<{
     id?: string
@@ -243,6 +259,88 @@ function extractAggiudicatari(release: OcdsRelease): AggiudicatariInsert[] {
   }
 
   return results
+}
+
+// ─── OCDS → Partecipanti mapping ──────────────────────────────────────────────
+
+type PartecipantiInsert = Database["public"]["Tables"]["partecipanti"]["Insert"]
+
+/**
+ * Estrae i record partecipanti (bidders) da un OCDS Release.
+ * I partecipanti sono in tender.tenderers[] — chiunque abbia presentato un'offerta.
+ * Restituisce un array (vuoto se non ci sono tenderers).
+ *
+ * Il codice fiscale del partecipante è in: tender.tenderers[].identifier.id
+ * Lo schema ANAC usa "IT-CF" come identifier.scheme.
+ */
+function extractPartecipanti(release: OcdsRelease): PartecipantiInsert[] {
+  const results: PartecipantiInsert[] = []
+  const t = release.tender ?? {}
+  const cig = trunc(t.id ?? release.ocid, 50)
+  if (!cig) return results
+
+  // Dati denormalizzati dalla gara
+  const cpvId = trunc(t.items?.[0]?.classification?.id, 20)
+  const cpvDesc = trunc(t.items?.[0]?.classification?.description, 1000)
+  const oggetto = trunc(t.title, 4000)
+  const provincia = trunc(
+    t.procuringEntity?.address?.region ?? t.procuringEntity?.address?.locality,
+    100
+  )
+
+  for (const tenderer of t.tenderers ?? []) {
+    // Il codice fiscale è il campo chiave
+    const cf = trunc(
+      tenderer.identifier?.id ?? tenderer.id,
+      16
+    )
+    if (!cf) continue
+
+    // Sanitizza: solo alfanumerico, rimuovi spazi
+    const cfClean = cf.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()
+    if (cfClean.length < 11) continue  // P.IVA=11 cifre, CF=16 caratteri
+
+    const denominazione = trunc(
+      tenderer.identifier?.legalName ?? tenderer.name,
+      1000
+    )
+
+    results.push({
+      codice_fiscale: cfClean,
+      denominazione,
+      tipo_soggetto: null,
+      cig,
+      ruolo: null,
+      id_aggiudicazione: null,
+      codice_cpv: cpvId,
+      descrizione_cpv: cpvDesc,
+      oggetto_gara: oggetto,
+      provincia,
+    })
+  }
+
+  return results
+}
+
+async function upsertPartecipantiBatch(
+  supabase: ReturnType<typeof createAdminClient>,
+  records: PartecipantiInsert[],
+  result: SyncResult
+) {
+  if (!records.length) return
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const chunk = records.slice(i, i + BATCH_SIZE)
+    const { error } = await supabase
+      .from("partecipanti")
+      .upsert(chunk, { onConflict: "codice_fiscale,cig" })
+    if (error) {
+      // Non-fatal: log but don't count as main sync errors
+      if (result.errorMessages.length < 10) {
+        result.errorMessages.push(`Partecipanti upsert: ${error.message}`)
+      }
+    }
+    if (i + BATCH_SIZE < records.length) await delay(120)
+  }
 }
 
 
@@ -496,6 +594,7 @@ async function syncMonthBulk(yearMonth: string): Promise<SyncResult> {
   const supabase = createAdminClient()
   const batch: CigInsert[] = []
   const awardBatch: AggiudicatariInsert[] = []
+  const partBatch: PartecipantiInsert[] = []
   let timedOut = false
 
   const flush = async () => {
@@ -506,6 +605,10 @@ async function syncMonthBulk(yearMonth: string): Promise<SyncResult> {
     if (awardBatch.length) {
       await upsertAggiudicatariBatch(supabase, awardBatch, result)
       awardBatch.length = 0
+    }
+    if (partBatch.length) {
+      await upsertPartecipantiBatch(supabase, partBatch, result)
+      partBatch.length = 0
     }
   }
 
@@ -528,6 +631,17 @@ async function syncMonthBulk(yearMonth: string): Promise<SyncResult> {
         if (awardBatch.length >= BATCH_SIZE) {
           await upsertAggiudicatariBatch(supabase, awardBatch, result)
           awardBatch.length = 0
+        }
+      }
+
+      // ── Estrai partecipanti (bidders) da tender.tenderers[] ──────────────
+      // I partecipanti sono presenti indipendentemente dallo stato della gara.
+      const participants = extractPartecipanti(release)
+      if (participants.length > 0) {
+        partBatch.push(...participants)
+        if (partBatch.length >= BATCH_SIZE) {
+          await upsertPartecipantiBatch(supabase, partBatch, result)
+          partBatch.length = 0
         }
       }
 

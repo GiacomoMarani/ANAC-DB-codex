@@ -48,6 +48,11 @@ export interface ProfilingResponse {
       count: number;
       percentage: number;
     }>;
+
+    // Partecipazioni (bidding history)
+    gare_partecipate: number;
+    tasso_successo: number;          // percentuale: gare_vinte / gare_partecipate * 100
+    gare_non_aggiudicate: number;
   };
 }
 

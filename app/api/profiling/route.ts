@@ -92,10 +92,25 @@ export async function POST(req: Request) {
       return { records: [], total: 0 }
     })
 
-    const [viesResult, localData, scpResult] = await Promise.all([
+    // 5. DB locale `partecipanti` → gare a cui l'azienda ha partecipato (anche senza vincere)
+    const partecipantiPromise = (async () => {
+      try {
+        const { data } = await supabase
+          .from("partecipanti")
+          .select("cig, codice_cpv, oggetto_gara, provincia")
+          .eq("codice_fiscale", piva)
+          .limit(2000)
+        return data && data.length > 0 ? data : []
+      } catch {
+        return []
+      }
+    })()
+
+    const [viesResult, localData, scpResult, partecipantiData] = await Promise.all([
       viesPromise,
       localPromise,
       scpPromise,
+      partecipantiPromise,
     ])
 
     const scpData = scpResult.records
@@ -173,6 +188,9 @@ export async function POST(req: Request) {
       cpv_divisions: [],
       province: [],
       tipi_contratto: [],
+      gare_partecipate: 0,
+      tasso_successo: 0,
+      gare_non_aggiudicate: 0,
     }
 
     // Se aggiudicatari ha la denominazione e VIES non ha il nome, usa quella
@@ -286,6 +304,21 @@ export async function POST(req: Request) {
         }))
         .sort((a, b) => b.count - a.count)
 
+      // ── Calcolo tasso di successo (partecipate vs vinte) ──────────
+      // CIG distinti a cui l'azienda ha partecipato (da tabella partecipanti)
+      const partCigs = new Set(partecipantiData.map((r) => r.cig))
+      // Aggiungi anche i CIG delle aggiudicazioni (l'azienda ha partecipato se ha vinto)
+      for (const row of aggiudicatariData) {
+        if (row.cig) partCigs.add(row.cig)
+      }
+      const garePartecipate = partCigs.size
+      const gareVinte = profile.gare_vinte
+      profile.gare_partecipate = garePartecipate
+      profile.gare_non_aggiudicate = Math.max(0, garePartecipate - gareVinte)
+      profile.tasso_successo = garePartecipate > 0
+        ? Math.round((gareVinte / garePartecipate) * 100)
+        : 0
+
       return NextResponse.json({
         profile,
         dataSource,
@@ -295,6 +328,7 @@ export async function POST(req: Request) {
           ted: dedupStats.tedCount,
           duplicates_removed: dedupStats.duplicatesRemoved,
           total_deduped: dedupStats.totalUnique,
+          partecipanti: partecipantiData.length,
         },
         ...(dataSource === "scp_mit" ? { scpMitTotal: scpData.length } : {}),
       })
@@ -312,6 +346,7 @@ export async function POST(req: Request) {
         ted: dedupStats.tedCount,
         duplicates_removed: dedupStats.duplicatesRemoved,
         total_deduped: 0,
+        partecipanti: partecipantiData.length,
       },
       message: "Nessuna aggiudicazione trovata nel database ANAC, nella banca dati SCP/MIT né sul TED europeo per questa Partita IVA.",
     })
