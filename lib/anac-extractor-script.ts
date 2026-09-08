@@ -17,7 +17,7 @@ export const ANAC_EXTRACTOR_SCRIPT = `
 (async function anacExtractor() {
   const INGEST_URL = '%%INGEST_URL%%';
   const API_KEY = '%%API_KEY%%';
-  const BATCH_SIZE = 50000;
+  const BATCH_SIZE = 5000;
   const COLUMNS = [
     'cig', 'cod_cpv', 'oggetto_bando', 'importo_aggiudicazione',
     'data_aggiudicazione_definitiva', 'denominazione_partecipante',
