@@ -28,12 +28,12 @@ export interface BaseAward {
   provincia: string | null
   ruolo: string | null
   tipo_appalto?: string | null
-  source?: "local" | "scp_mit" | "ted" | "anac_live" | "merged"
+  source?: "local" | "scp_mit" | "ted" | "anac_live" | "turso_storico" | "merged"
 }
 
 export interface UnifiedAward extends BaseAward {
   cig: string
-  source: "local" | "scp_mit" | "ted" | "anac_live" | "merged"
+  source: "local" | "scp_mit" | "ted" | "anac_live" | "turso_storico" | "merged"
 }
 
 /** Verifica se una stringa è un CIG standard valido (10 caratteri alfanumerici contenente sia numeri che lettere) */

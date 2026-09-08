@@ -8,6 +8,7 @@ import { lookupVies } from "@/lib/utils/vies"
 import { lookupScpMit, searchScpMitByName, type ScpAggiudicazione } from "@/lib/services/scpMit"
 import { lookupTedAwards, type TedAward } from "@/lib/services/tedAwards"
 import { deduplicateAwards, type UnifiedAward } from "@/lib/utils/dedupAwards"
+import { queryAggiudicatariByFiscalCode } from "@/lib/turso"
 import type { ProfilingResponse } from "@/lib/utils/piva"
 
 /**
@@ -227,14 +228,19 @@ export async function POST(req: Request) {
       }
     })()
 
-    const [viesResult, localData, scpResult, partecipantiData] = await Promise.all([
+    const [viesResult, localData, scpResult, partecipantiData, tursoData] = await Promise.all([
       viesPromise,
       localPromise,
       scpPromise,
       partecipantiPromise,
+      queryAggiudicatariByFiscalCode(lookupKey),
     ])
 
     const scpData = scpResult.records
+
+    if (tursoData.length > 0) {
+      console.log(`[profiling] Turso storico: ${tursoData.length} records for ${lookupKey}`)
+    }
 
     // ── Map ANAC live data (relay) to local format if present ─────
     const anacLiveRecords = (anacData || []).map((r) => ({
@@ -273,11 +279,31 @@ export async function POST(req: Request) {
       }
     }
 
-    // Merge local + ANAC live records (ANAC live has priority for CPV data)
-    const combinedLocalRecords = [...localData.map((r) => ({
-      ...r,
-      source: "local" as const,
-    })), ...anacLiveRecords]
+    // ── Map Turso storico records to local format ─────
+    const tursoRecords = tursoData.map((r) => ({
+      codice_fiscale: r.cod_fisc,
+      denominazione: r.denominazione || "",
+      cig: r.cig,
+      importo_aggiudicazione: r.importo_aggiudicazione,
+      data_aggiudicazione: r.data_aggiudicazione,
+      codice_cpv: r.cod_cpv,
+      descrizione_cpv: null as string | null,
+      oggetto_gara: r.oggetto_bando,
+      provincia: r.provincia,
+      ruolo: r.ruolo,
+      tipo_appalto: r.tipo_contratto,
+      source: "turso_storico" as const,
+    }))
+
+    // Merge local + ANAC live + Turso storico records
+    const combinedLocalRecords = [
+      ...localData.map((r) => ({
+        ...r,
+        source: "local" as const,
+      })),
+      ...anacLiveRecords,
+      ...tursoRecords,
+    ]
 
     // Unifica e deduplica con algoritmo a 3 livelli (CIG esatto, ID notice, Fuzzy heuristic)
     const { deduped: aggiudicatariData, stats: dedupStats } = deduplicateAwards({
