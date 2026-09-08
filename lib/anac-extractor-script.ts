@@ -17,7 +17,7 @@ export const ANAC_EXTRACTOR_SCRIPT = `
 (async function anacExtractor() {
   const INGEST_URL = '%%INGEST_URL%%';
   const API_KEY = '%%API_KEY%%';
-  const BATCH_SIZE = 5000;
+  const BATCH_SIZE = 1000;
   const COLUMNS = [
     'cig', 'cod_cpv', 'oggetto_bando', 'importo_aggiudicazione',
     'data_aggiudicazione_definitiva', 'denominazione_partecipante',
@@ -147,7 +147,7 @@ export const ANAC_EXTRACTOR_SCRIPT = `
     }
 
     // Small delay to be polite
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 200));
   }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
