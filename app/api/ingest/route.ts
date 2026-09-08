@@ -73,11 +73,10 @@ export async function POST(request: Request) {
       return corsJson({ error: "Turso not configured" }, { status: 503 })
     }
 
-    // Batch insert using transaction
-    const statements = records
+    // Batch insert using multi-row INSERT for speed
+    const validRecords = records
       .filter((r) => r.cig && r.cod_fisc_partecipante)
       .map((r) => {
-        // Convert timestamp to ISO date if numeric
         let dataAgg: string | null = null
         if (r.data_aggiudicazione_definitiva) {
           if (typeof r.data_aggiudicazione_definitiva === "number") {
@@ -88,55 +87,53 @@ export async function POST(request: Request) {
             dataAgg = String(r.data_aggiudicazione_definitiva)
           }
         }
-
-        return {
-          sql: `INSERT OR REPLACE INTO aggiudicatari_storico
-                (cig, cod_fisc, denominazione, cod_cpv, oggetto_bando,
-                 importo_aggiudicazione, data_aggiudicazione, provincia,
-                 stazione_appaltante, tipo_contratto, sezione_regionale,
-                 settore, importo_lotto, ruolo, flag_pnrr)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          args: [
-            r.cig!,
-            r.cod_fisc_partecipante!,
-            r.denominazione_partecipante || null,
-            r.cod_cpv || null,
-            r.oggetto_bando || null,
-            r.importo_aggiudicazione ?? null,
-            dataAgg,
-            r.provincia || null,
-            r.denominazione_amministrazione_appaltante || null,
-            r.oggetto_principale_contratto || null,
-            r.sezione_regionale || null,
-            r.settore || null,
-            r.importo_lotto ?? null,
-            r.partecipante_ruolo || null,
-            r.flag_pnrr_pnc || null,
-          ],
-        }
+        return [
+          r.cig!, r.cod_fisc_partecipante!,
+          r.denominazione_partecipante || null, r.cod_cpv || null,
+          r.oggetto_bando || null, r.importo_aggiudicazione ?? null,
+          dataAgg, r.provincia || null,
+          r.denominazione_amministrazione_appaltante || null,
+          r.oggetto_principale_contratto || null,
+          r.sezione_regionale || null, r.settore || null,
+          r.importo_lotto ?? null, r.partecipante_ruolo || null,
+          r.flag_pnrr_pnc || null,
+        ]
       })
 
-    if (statements.length === 0) {
+    if (validRecords.length === 0) {
       return corsJson(
         { error: "No valid records (missing cig or cod_fisc)" },
         { status: 400 }
       )
     }
 
-    // Execute in batches of 500 to avoid hitting limits
-    const BATCH_SIZE = 500
+    // Build multi-row INSERT in chunks of 50 rows
+    const CHUNK = 50
+    const COLS = 15
     let inserted = 0
-    for (let i = 0; i < statements.length; i += BATCH_SIZE) {
-      const batch = statements.slice(i, i + BATCH_SIZE)
-      await client.batch(batch)
-      inserted += batch.length
+    for (let i = 0; i < validRecords.length; i += CHUNK) {
+      const chunk = validRecords.slice(i, i + CHUNK)
+      const placeholders = chunk
+        .map(() => `(${Array(COLS).fill("?").join(",")})`)
+        .join(",")
+      const args = chunk.flat()
+      await client.execute({
+        sql: `INSERT OR REPLACE INTO aggiudicatari_storico
+              (cig, cod_fisc, denominazione, cod_cpv, oggetto_bando,
+               importo_aggiudicazione, data_aggiudicazione, provincia,
+               stazione_appaltante, tipo_contratto, sezione_regionale,
+               settore, importo_lotto, ruolo, flag_pnrr)
+              VALUES ${placeholders}`,
+        args,
+      })
+      inserted += chunk.length
     }
 
     return corsJson({
       ok: true,
       inserted,
       total: records.length,
-      filtered: records.length - statements.length,
+      filtered: records.length - validRecords.length,
     })
   } catch (err) {
     console.error("[ingest] Error:", err)
