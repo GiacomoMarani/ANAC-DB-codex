@@ -8,6 +8,19 @@ import { getTursoClient, getAggiudicatariCount } from "@/lib/turso"
 
 const INGEST_API_KEY = process.env.INGEST_API_KEY || ""
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+}
+
+/**
+ * OPTIONS /api/ingest — CORS preflight
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
+}
+
 interface AnacRecord {
   cig?: string
   cod_fisc_partecipante?: string
@@ -27,6 +40,13 @@ interface AnacRecord {
 }
 
 /**
+ * Helper: NextResponse.json with CORS headers
+ */
+function corsJson(data: unknown, init?: { status?: number }) {
+  return NextResponse.json(data, { ...init, headers: CORS_HEADERS })
+}
+
+/**
  * POST /api/ingest — Batch insert aggiudicatari records into Turso.
  * Protected by INGEST_API_KEY.
  * Accepts JSON body: { records: AnacRecord[], apiKey: string }
@@ -41,22 +61,16 @@ export async function POST(request: Request) {
 
     // Auth check
     if (!INGEST_API_KEY || apiKey !== INGEST_API_KEY) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return corsJson({ error: "Unauthorized" }, { status: 401 })
     }
 
     if (!Array.isArray(records) || records.length === 0) {
-      return NextResponse.json(
-        { error: "No records provided" },
-        { status: 400 }
-      )
+      return corsJson({ error: "No records provided" }, { status: 400 })
     }
 
     const client = getTursoClient()
     if (!client) {
-      return NextResponse.json(
-        { error: "Turso not configured" },
-        { status: 503 }
-      )
+      return corsJson({ error: "Turso not configured" }, { status: 503 })
     }
 
     // Batch insert using transaction
@@ -103,7 +117,7 @@ export async function POST(request: Request) {
       })
 
     if (statements.length === 0) {
-      return NextResponse.json(
+      return corsJson(
         { error: "No valid records (missing cig or cod_fisc)" },
         { status: 400 }
       )
@@ -118,7 +132,7 @@ export async function POST(request: Request) {
       inserted += batch.length
     }
 
-    return NextResponse.json({
+    return corsJson({
       ok: true,
       inserted,
       total: records.length,
@@ -126,10 +140,7 @@ export async function POST(request: Request) {
     })
   } catch (err) {
     console.error("[ingest] Error:", err)
-    return NextResponse.json(
-      { error: String(err) },
-      { status: 500 }
-    )
+    return corsJson({ error: String(err) }, { status: 500 })
   }
 }
 
@@ -141,9 +152,9 @@ export async function GET(request: Request) {
   const apiKey = url.searchParams.get("apiKey")
 
   if (!INGEST_API_KEY || apiKey !== INGEST_API_KEY) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return corsJson({ error: "Unauthorized" }, { status: 401 })
   }
 
   const count = await getAggiudicatariCount()
-  return NextResponse.json({ ok: true, count })
+  return corsJson({ ok: true, count })
 }
