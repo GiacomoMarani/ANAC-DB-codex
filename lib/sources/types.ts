@@ -87,6 +87,45 @@ export type SourceKey =
   | "appaltiitalia"
   | "eni_proc"
   | "sisgap"
+  // Sotto-fonti ITA scoperte 2026-09-08 (full DB scan — 36 fonti aggiuntive):
+  | "sestosangiovanni"
+  | "acquistionlinerfi"
+  | "aslto3"
+  | "roga"
+  | "consorzioit"
+  | "sardegna_regione"
+  | "eutalia"
+  | "docsuite"
+  | "gruppocap"
+  | "onaosi"
+  | "urbi"
+  | "pleiade"
+  | "bibbiena"
+  | "aspcrotone"
+  | "umbria"
+  | "ats_lombardia"
+  | "roma"
+  | "gomrc"
+  | "aressardegna"
+  | "telemat"
+  | "posteprocurement"
+  | "provincia_treviso"
+  | "crocerossa"
+  | "mit"
+  | "asp_reggio_calabria"
+  | "sacile"
+  | "cuc_molise"
+  | "ats_milano"
+  | "rfi"
+  | "proq"
+  | "aulss1dolomiti"
+  | "sicilia"
+  | "asst_fbf_sacco"
+  | "marche"
+  | "sua_rb"
+  | "aslroma2"
+  | "leonardo"
+  | "unict"
   // Fonti dirette internazionali (sync scripts dedicati):
   | "boamp"
   | "contracts_finder"
@@ -138,6 +177,45 @@ export const SOURCE_LABELS: Record<SourceKey, string> = {
   appaltiitalia:    "Appalti Italia",
   eni_proc:         "ENI Procurement",
   sisgap:           "SISGAP",
+  // Sotto-fonti 2026-09-08:
+  sestosangiovanni:   "Sesto San Giovanni",
+  acquistionlinerfi:  "Acquisti Online RFI",
+  aslto3:             "ASL TO3 Torino",
+  roga:               "ROGA",
+  consorzioit:        "Consorzio.IT",
+  sardegna_regione:   "Regione Sardegna",
+  eutalia:            "Eutalia",
+  docsuite:           "DocSuite",
+  gruppocap:          "Gruppo CAP",
+  onaosi:             "ONAOSI",
+  urbi:               "URBI",
+  pleiade:            "Pleiade",
+  bibbiena:           "Comune di Bibbiena",
+  aspcrotone:         "ASP Crotone",
+  umbria:             "Umbria",
+  ats_lombardia:      "ATS Lombardia",
+  roma:               "Roma Capitale",
+  gomrc:              "GOMRC",
+  aressardegna:       "ARES Sardegna",
+  telemat:            "Telemat",
+  posteprocurement:   "Poste Procurement",
+  provincia_treviso:  "Provincia di Treviso",
+  crocerossa:         "Croce Rossa Italiana",
+  mit:                "MIT Infrastrutture",
+  asp_reggio_calabria: "ASP Reggio Calabria",
+  sacile:             "Comune di Sacile",
+  cuc_molise:         "CUC Molise",
+  ats_milano:         "ATS Milano",
+  rfi:                "RFI (Rete Ferroviaria)",
+  proq:               "ProQ",
+  aulss1dolomiti:     "AULSS1 Dolomiti",
+  sicilia:            "Sicilia",
+  asst_fbf_sacco:     "ASST FBF Sacco",
+  marche:             "Marche",
+  sua_rb:             "SUA RB",
+  aslroma2:           "ASL Roma 2",
+  leonardo:           "Leonardo S.p.A.",
+  unict:              "Università di Catania",
   // Fonti dirette internazionali:
   boamp:            "BOAMP (Francia)",
   contracts_finder: "Contracts Finder (UK)",
@@ -190,6 +268,45 @@ export const SOURCE_COLORS: Record<SourceKey, { bg: string; text: string; border
   appaltiitalia:    { bg: "bg-zinc-600/15",    text: "text-zinc-800",    border: "border-zinc-300" },
   eni_proc:         { bg: "bg-slate-600/15",   text: "text-slate-800",   border: "border-slate-300" },
   sisgap:           { bg: "bg-red-500/15",     text: "text-red-700",     border: "border-red-200" },
+  // Sotto-fonti 2026-09-08:
+  sestosangiovanni:   { bg: "bg-blue-400/15",    text: "text-blue-600",    border: "border-blue-200" },
+  acquistionlinerfi:  { bg: "bg-green-400/15",   text: "text-green-600",   border: "border-green-200" },
+  aslto3:             { bg: "bg-teal-400/15",    text: "text-teal-600",    border: "border-teal-200" },
+  roga:               { bg: "bg-orange-400/15",  text: "text-orange-600",  border: "border-orange-200" },
+  consorzioit:        { bg: "bg-indigo-400/15",  text: "text-indigo-600",  border: "border-indigo-200" },
+  sardegna_regione:   { bg: "bg-lime-400/15",    text: "text-lime-600",    border: "border-lime-200" },
+  eutalia:            { bg: "bg-violet-400/15",  text: "text-violet-600",  border: "border-violet-200" },
+  docsuite:           { bg: "bg-cyan-400/15",    text: "text-cyan-600",    border: "border-cyan-200" },
+  gruppocap:          { bg: "bg-sky-400/15",     text: "text-sky-600",     border: "border-sky-200" },
+  onaosi:             { bg: "bg-amber-400/15",   text: "text-amber-600",   border: "border-amber-200" },
+  urbi:               { bg: "bg-pink-400/15",    text: "text-pink-600",    border: "border-pink-200" },
+  pleiade:            { bg: "bg-fuchsia-400/15", text: "text-fuchsia-600", border: "border-fuchsia-200" },
+  bibbiena:           { bg: "bg-emerald-400/15", text: "text-emerald-600", border: "border-emerald-200" },
+  aspcrotone:         { bg: "bg-rose-400/15",    text: "text-rose-600",    border: "border-rose-200" },
+  umbria:             { bg: "bg-purple-400/15",  text: "text-purple-600",  border: "border-purple-200" },
+  ats_lombardia:      { bg: "bg-red-400/15",     text: "text-red-600",     border: "border-red-200" },
+  roma:               { bg: "bg-yellow-400/15",  text: "text-yellow-600",  border: "border-yellow-200" },
+  gomrc:              { bg: "bg-stone-400/15",   text: "text-stone-600",   border: "border-stone-200" },
+  aressardegna:       { bg: "bg-slate-400/15",   text: "text-slate-600",   border: "border-slate-200" },
+  telemat:            { bg: "bg-zinc-400/15",    text: "text-zinc-600",    border: "border-zinc-200" },
+  posteprocurement:   { bg: "bg-blue-700/15",    text: "text-blue-900",    border: "border-blue-400" },
+  provincia_treviso:  { bg: "bg-green-700/15",   text: "text-green-900",   border: "border-green-400" },
+  crocerossa:         { bg: "bg-red-700/15",     text: "text-red-900",     border: "border-red-400" },
+  mit:                { bg: "bg-indigo-700/15",  text: "text-indigo-900",  border: "border-indigo-400" },
+  asp_reggio_calabria:{ bg: "bg-orange-700/15",  text: "text-orange-900",  border: "border-orange-400" },
+  sacile:             { bg: "bg-teal-700/15",    text: "text-teal-900",    border: "border-teal-400" },
+  cuc_molise:         { bg: "bg-violet-700/15",  text: "text-violet-900",  border: "border-violet-400" },
+  ats_milano:         { bg: "bg-cyan-700/15",    text: "text-cyan-900",    border: "border-cyan-400" },
+  rfi:                { bg: "bg-amber-700/15",   text: "text-amber-900",   border: "border-amber-400" },
+  proq:               { bg: "bg-lime-700/15",    text: "text-lime-900",    border: "border-lime-400" },
+  aulss1dolomiti:     { bg: "bg-sky-700/15",     text: "text-sky-900",     border: "border-sky-400" },
+  sicilia:            { bg: "bg-pink-700/15",    text: "text-pink-900",    border: "border-pink-400" },
+  asst_fbf_sacco:     { bg: "bg-fuchsia-700/15", text: "text-fuchsia-900", border: "border-fuchsia-400" },
+  marche:             { bg: "bg-emerald-700/15", text: "text-emerald-900", border: "border-emerald-400" },
+  sua_rb:             { bg: "bg-rose-700/15",    text: "text-rose-900",    border: "border-rose-400" },
+  aslroma2:           { bg: "bg-purple-700/15",  text: "text-purple-900",  border: "border-purple-400" },
+  leonardo:           { bg: "bg-stone-700/15",   text: "text-stone-900",   border: "border-stone-400" },
+  unict:              { bg: "bg-yellow-700/15",  text: "text-yellow-900",  border: "border-yellow-400" },
   // Fonti dirette internazionali:
   boamp:            { bg: "bg-blue-500/15",    text: "text-blue-700",    border: "border-blue-200" },
   contracts_finder: { bg: "bg-red-500/15",     text: "text-red-700",     border: "border-red-200" },
@@ -219,4 +336,3 @@ export function buildAnacCigUrl(cig: string, anacIdAvviso?: string | null): stri
   // Fallback: ricerca CIG sul portale pubblicità legale ANAC
   return `https://pubblicitalegale.anticorruzione.it/ricerca?cig=${encodeURIComponent(cig)}`
 }
-
