@@ -359,43 +359,64 @@ function AiAnalysisPanel({ tender, sourceUrl }: { tender: TenderItem; sourceUrl?
 
   const buildPrompt = () => {
     const cigCode = getCigCode(tender.cig)
-    return `Sei un esperto di appalti pubblici italiani. Analizza questo bando e CERCA SUL WEB informazioni aggiornate.
+    const sourceUrl_ = sourceUrl || tender.link_originale || "Non disponibile"
+    return `Analizza questo bando di gara e CERCA SUL WEB informazioni aggiornate.
 
-**Dati disponibili:**
-- Oggetto: ${tender.oggetto || "Non specificato"}
-- CIG: ${cigCode !== "—" ? cigCode : "Non disponibile"}
-- Importo stimato: ${formatCurrency(tender.importo) || "Non specificato"}
-- Stazione appaltante: ${tender.stazione_appaltante || "Non specificata"}
-- CPV: ${tender.descrizione_cpv || "Non specificato"}
-- Tipo contratto: ${tender.tipo_contratto || "Non specificato"}
-- Scadenza offerte: ${formatDate(tender.data_scadenza) || "Non specificata"}
-- Fonte: ${tender.sources?.toUpperCase() || "Non specificata"}
-- Link fonte: ${sourceUrl || "Non disponibile"}
+## Dati del bando
 
-Cerca sul web e fornisci un'analisi strutturata:
+| Campo | Valore |
+|-------|--------|
+| **Oggetto** | ${tender.oggetto || "Non specificato"} |
+| **CIG** | ${cigCode !== "—" ? cigCode : "Non disponibile"} |
+| **Importo stimato** | ${formatCurrency(tender.importo) || "Non specificato"} |
+| **Stazione appaltante** | ${tender.stazione_appaltante || "Non specificata"} |
+| **CPV** | ${tender.descrizione_cpv || "Non specificato"} |
+| **Tipo contratto** | ${tender.tipo_contratto || "Non specificato"} |
+| **Stato** | ${tender.stato || "Non specificato"} |
+| **Provincia** | ${tender.provincia || "Non specificata"} |
+| **Data pubblicazione** | ${formatDate(tender.data_pubblicazione) || "Non specificata"} |
+| **Scadenza offerte** | ${formatDate(tender.data_scadenza) || "Non specificata"} |
+| **Fonte** | ${tender.sources?.toUpperCase() || "Non specificata"} |
+| **Link fonte** | ${sourceUrl_} |
 
-1. **Sintesi** — cosa richiede il bando in 2-3 frasi semplici
+## Istruzioni
 
-2. **Date chiave** — elenca tutte le date importanti trovate:
-   - Data pubblicazione
-   - Scadenza presentazione offerte
-   - Data apertura buste (se disponibile)
-   - Eventuali proroghe
+Cerca sul web usando il CIG, il nome della stazione appaltante e l'oggetto del bando.
+Fornisci un'analisi strutturata con ESATTAMENTE queste 6 sezioni:
 
-3. **Link utili** — cerca e fornisci i link diretti a:
-   - Pagina ufficiale del bando sulla piattaforma di e-procurement
-   - Pagina di download della documentazione di gara
-   - Disciplinare, capitolato, modelli di partecipazione se trovati
-   - Eventuali chiarimenti/FAQ pubblicati
+### 1. Sintesi
+Cosa richiede il bando in 2-3 frasi chiare. Indica il settore merceologico e la tipologia di prestazione (fornitura, servizio, lavori).
 
-4. **Dove scaricare la documentazione** — indica esattamente su quale piattaforma e in quale sezione trovare i documenti di gara (es. Sintel, MePA, Start Toscana, sito della stazione appaltante)
+### 2. Date chiave
+Elenca in formato tabella:
+- Data pubblicazione
+- Scadenza presentazione offerte (con giorni rimanenti)
+- Data apertura buste (se trovata)
+- Eventuali proroghe o rettifiche trovate
 
-5. **Requisiti di partecipazione** — requisiti tecnici, economici e certificazioni necessarie
+### 3. Link utili
+Cerca e fornisci i link DIRETTI e VERIFICATI a:
+- Pagina ufficiale del bando sulla piattaforma di e-procurement
+- Pagina di download della documentazione di gara
+- Disciplinare, capitolato, modelli di partecipazione
+- Chiarimenti/FAQ pubblicati
+Se un link non è trovato, scrivi "Non trovato" — non inventare URL.
 
-6. **Consiglio rapido** — se vale la pena approfondire e perché
+### 4. Dove scaricare la documentazione
+Indica con precisione:
+- Nome della piattaforma telematica (es. Sintel, MePA, SardegnaCAT, Start Toscana, Stella)
+- Sezione specifica dove cercare
+- Eventuali credenziali o registrazioni necessarie per accedere
 
-IMPORTANTE: Includi sempre gli URL completi che trovi. Se non trovi un link, indicalo chiaramente.
-Rispondi in italiano, in modo professionale ma accessibile.`
+### 5. Requisiti di partecipazione
+- Requisiti di capacità tecnica e professionale
+- Requisiti di capacità economico-finanziaria
+- Certificazioni obbligatorie (SOA, ISO, ecc.)
+- Forma di partecipazione ammessa (singola, RTI, consorzio)
+Se non trovi i dettagli, indica dove consultarli (disciplinare, sezione X).
+
+### 6. Consiglio rapido
+Valutazione sintetica: vale la pena approfondire? Per quale tipo di azienda? Punti di attenzione.`
   }
 
   const handleAnalyze = async () => {

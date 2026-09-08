@@ -56,7 +56,7 @@ export const GROUNDING_MODELS = [
 ] as const
 
 const MAX_OUTPUT_TOKENS = 8192
-const TEMPERATURE = 0.3
+const TEMPERATURE = 0.15
 
 /** Quota retry config — mirrors Tender AI Render's runWithFallback() */
 const QUOTA_RETRY_PASSES = 3
@@ -85,6 +85,8 @@ export interface GeminiStreamResult {
   text: string
   sources: GeminiSource[]
   modelUsed: string
+  /** The search query Gemini used for grounding (from searchEntryPoint) */
+  searchQuery?: string
 }
 
 // ─── Quota Error Detection ────────────────────────────────────────────────────
@@ -115,12 +117,27 @@ function extractRetryHint(message: string): string {
   return ""
 }
 
+// ─── System Instruction ───────────────────────────────────────────────────────
+
+const SYSTEM_INSTRUCTION = `Sei un analista senior specializzato in appalti pubblici italiani ed europei.
+Il tuo compito è analizzare bandi di gara e fornire informazioni precise, verificate e utili.
+
+Regole:
+- Rispondi SEMPRE in italiano, in modo professionale ma accessibile.
+- Quando cerchi sul web, includi SEMPRE gli URL completi delle fonti trovate.
+- Se non trovi un'informazione, dichiaralo esplicitamente — non inventare.
+- Le date devono essere in formato DD/MM/YYYY.
+- Gli importi in formato europeo con € (es. € 150.000,00).
+- Cita sempre la piattaforma di e-procurement specifica (Sintel, MePA, SardegnaCAT, Start Toscana, ecc.).
+- Distingui chiaramente tra informazioni certe (dalla fonte) e supposizioni.`
+
 // ─── Core: Single Model Call (non-streaming, for grounding) ───────────────────
 
 interface RawGeminiResponse {
   text: string
   sources: GeminiSource[]
   finishReason: string | null
+  searchQuery?: string
 }
 
 async function callModel(
@@ -131,16 +148,22 @@ async function callModel(
 ): Promise<RawGeminiResponse> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body: any = {
+    systemInstruction: {
+      parts: [{ text: SYSTEM_INSTRUCTION }],
+    },
     contents,
     generationConfig: {
       temperature: TEMPERATURE,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
+      responseMimeType: "text/plain",
     },
   }
 
-  // Google Search Grounding for real web links
+  // Google Search Grounding with Dynamic Retrieval
   if (useSearch) {
-    body.tools = [{ google_search: {} }]
+    body.tools = [{
+      google_search: {},
+    }]
   }
 
   const res = await fetch(
@@ -167,7 +190,7 @@ async function callModel(
   const text = candidate?.content?.parts?.[0]?.text || ""
   const finishReason = candidate?.finishReason || null
 
-  // Extract grounding sources
+  // Extract grounding sources (deduplicated)
   const sources: GeminiSource[] = []
   const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
   const seen = new Set<string>()
@@ -180,7 +203,12 @@ async function callModel(
     }
   }
 
-  return { text, sources, finishReason }
+  // Extract search entry point (the query Gemini used to search)
+  const searchQuery = candidate?.groundingMetadata?.searchEntryPoint?.renderedContent
+    ? undefined // renderedContent is HTML, not useful as text
+    : candidate?.groundingMetadata?.webSearchQueries?.[0] || undefined
+
+  return { text, sources, finishReason, searchQuery }
 }
 
 // ─── Core: Streaming Call (for progressive UI) ───────────────────────────────
@@ -198,10 +226,14 @@ async function streamModel(
 ): Promise<StreamResult> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body: any = {
+    systemInstruction: {
+      parts: [{ text: SYSTEM_INSTRUCTION }],
+    },
     contents,
     generationConfig: {
       temperature: TEMPERATURE,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
+      responseMimeType: "text/plain",
     },
   }
 
