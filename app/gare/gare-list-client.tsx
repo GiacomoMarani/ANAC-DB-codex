@@ -24,6 +24,13 @@ import { SOURCE_LABELS, SOURCE_COLORS, buildAnacCigUrl } from "@/lib/sources/typ
 import type { NormalizedTender } from "@/lib/sources/types"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useSearchParams } from "next/navigation"
+import {
+  getGeminiKey, setGeminiKey, removeGeminiKey,
+  getCachedAnalysis, setCachedAnalysis,
+  analyzeWithStreamingAndGrounding,
+  DEFAULT_MODEL, FALLBACK_MODELS,
+  type StreamCallbacks,
+} from "@/lib/ai/gemini-client"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -194,191 +201,9 @@ function isPublishedWithinHours(d: string | null, hours: number): boolean {
   return publishedAt >= cutoff && publishedAt <= now
 }
 
-// ─── AI Analysis Helpers ─────────────────────────────────────────────────────
+// ─── AI helpers moved to @/lib/ai/gemini-client ─────────────────────────────
 
-const GEMINI_KEY_STORAGE = "gemini_api_key"
-const AI_CACHE_PREFIX    = "ai_analysis_"
 
-function getGeminiKey(): string | null {
-  if (typeof window === "undefined") return null
-  return localStorage.getItem(GEMINI_KEY_STORAGE)
-}
-
-function setGeminiKey(key: string) {
-  localStorage.setItem(GEMINI_KEY_STORAGE, key)
-}
-
-function removeGeminiKey() {
-  localStorage.removeItem(GEMINI_KEY_STORAGE)
-}
-
-function getCachedAnalysis(id: string): string | null {
-  if (typeof window === "undefined") return null
-  return sessionStorage.getItem(AI_CACHE_PREFIX + id)
-}
-
-function setCachedAnalysis(id: string, result: string) {
-  sessionStorage.setItem(AI_CACHE_PREFIX + id, result)
-}
-
-class QuotaError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "QuotaError"
-  }
-}
-
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"] as const
-
-interface GeminiResult {
-  text: string
-  sources: { title: string; url: string }[]
-}
-
-async function callGeminiModel(
-  apiKey: string,
-  model: string,
-  prompt: string,
-  useSearch = false,
-): Promise<GeminiResult> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const body: any = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 2048,
-    },
-  }
-
-  // Abilita Google Search grounding per cercare link reali
-  if (useSearch) {
-    body.tools = [{ google_search: {} }]
-  }
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-  )
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: { message: res.statusText } }))
-    const msg = err.error?.message || `Errore API Gemini (${model}): ${res.status}`
-
-    // Quota esaurita → errore specifico con messaggio chiaro
-    if (res.status === 429 || msg.toLowerCase().includes("quota")) {
-      // Estrai tempo di retry se presente (es. "retry in 16.4s")
-      const retryMatch = msg.match(/retry in ([\d.]+)s/i)
-      const retrySec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : null
-      const retryHint = retrySec ? ` Riprova tra ${retrySec} secondi.` : ""
-      throw new QuotaError(
-        `Quota API esaurita per ${model}.${retryHint} Verifica il tuo piano su ai.google.dev.`
-      )
-    }
-
-    throw new Error(msg)
-  }
-
-  const data = await res.json()
-  const candidate = data.candidates?.[0]
-  const text = candidate?.content?.parts?.[0]?.text || "Nessuna risposta generata."
-
-  // Estrai fonti dal grounding metadata
-  const sources: { title: string; url: string }[] = []
-  const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
-  const seen = new Set<string>()
-  for (const chunk of chunks) {
-    const uri   = chunk?.web?.uri
-    const title = chunk?.web?.title
-    if (uri && !seen.has(uri)) {
-      seen.add(uri)
-      sources.push({ title: title || uri, url: uri })
-    }
-  }
-
-  return { text, sources }
-}
-
-async function analyzeWithGemini(apiKey: string, tender: TenderItem, sourceUrl?: string): Promise<string> {
-  const cigCode = getCigCode(tender.cig)
-  const prompt = `Sei un esperto di appalti pubblici italiani. Analizza questo bando e CERCA SUL WEB informazioni aggiornate.
-
-**Dati disponibili:**
-- Oggetto: ${tender.oggetto || "Non specificato"}
-- CIG: ${cigCode !== "—" ? cigCode : "Non disponibile"}
-- Importo stimato: ${formatCurrency(tender.importo) || "Non specificato"}
-- Stazione appaltante: ${tender.stazione_appaltante || "Non specificata"}
-- CPV: ${tender.descrizione_cpv || "Non specificato"}
-- Tipo contratto: ${tender.tipo_contratto || "Non specificato"}
-- Scadenza offerte: ${formatDate(tender.data_scadenza) || "Non specificata"}
-- Fonte: ${tender.sources?.toUpperCase() || "Non specificata"}
-- Link fonte: ${sourceUrl || "Non disponibile"}
-
-Cerca sul web e fornisci un'analisi strutturata:
-
-1. **Sintesi** — cosa richiede il bando in 2-3 frasi semplici
-
-2. **Date chiave** — elenca tutte le date importanti trovate:
-   - Data pubblicazione
-   - Scadenza presentazione offerte
-   - Data apertura buste (se disponibile)
-   - Eventuali proroghe
-
-3. **Link utili** — cerca e fornisci i link diretti a:
-   - Pagina ufficiale del bando sulla piattaforma di e-procurement
-   - Pagina di download della documentazione di gara
-   - Disciplinare, capitolato, modelli di partecipazione se trovati
-   - Eventuali chiarimenti/FAQ pubblicati
-
-4. **Dove scaricare la documentazione** — indica esattamente su quale piattaforma e in quale sezione trovare i documenti di gara (es. Sintel, MePA, Start Toscana, sito della stazione appaltante)
-
-5. **Requisiti di partecipazione** — requisiti tecnici, economici e certificazioni necessarie
-
-6. **Consiglio rapido** — se vale la pena approfondire e perché
-
-IMPORTANTE: Includi sempre gli URL completi che trovi. Se non trovi un link, indicalo chiaramente.
-Rispondi in italiano, in modo professionale ma accessibile.`
-
-  // Prova i modelli in ordine, fallback al successivo se il modello non è disponibile
-  // Se è un errore di quota, prova il modello successivo (più leggero = meno quota)
-  let lastError: Error | null = null
-  for (let i = 0; i < GEMINI_MODELS.length; i++) {
-    try {
-      const result = await callGeminiModel(apiKey, GEMINI_MODELS[i], prompt, true)
-
-      // Componi il testo finale con le fonti trovate
-      let output = result.text
-
-      if (result.sources.length > 0) {
-        output += "\n\n---\n\n### 🔗 Fonti trovate\n"
-        for (const src of result.sources) {
-          output += `- [${src.title}](${src.url})\n`
-        }
-      }
-
-      return output
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e))
-      if (i < GEMINI_MODELS.length - 1) {
-        console.warn(`Modello ${GEMINI_MODELS[i]} non disponibile, fallback su ${GEMINI_MODELS[i + 1]}`)
-      }
-    }
-  }
-
-  // Tutti i modelli falliti
-  if (lastError instanceof QuotaError) {
-    throw new Error(
-      "⚠️ Quota API Gemini esaurita su tutti i modelli. " +
-      "Attendi qualche minuto oppure passa a un piano a pagamento su ai.google.dev/pricing"
-    )
-  }
-  throw lastError ?? new Error("Nessun modello Gemini disponibile")
-}
-
-// ─── AI Settings Modal ──────────────────────────────────────────────────────
 
 function AiKeyModal({ onClose }: { onClose: () => void }) {
   const [key, setKeyVal] = useState(getGeminiKey() || "")
@@ -526,19 +351,82 @@ function AiAnalysisPanel({ tender, sourceUrl }: { tender: TenderItem; sourceUrl?
   const [result, setResult]     = useState<string | null>(null)
   const [error, setError]       = useState<string | null>(null)
   const [copied, setCopied]     = useState(false)
+  const [fallbackMsg, setFallbackMsg] = useState<string | null>(null)
+  const accumulatedRef = useRef("")
 
   const tenderId = String(tender.cig ?? tender.id)
   const fileName = `analisi_${tenderId}`
+
+  const buildPrompt = () => {
+    const cigCode = getCigCode(tender.cig)
+    return `Sei un esperto di appalti pubblici italiani. Analizza questo bando e CERCA SUL WEB informazioni aggiornate.
+
+**Dati disponibili:**
+- Oggetto: ${tender.oggetto || "Non specificato"}
+- CIG: ${cigCode !== "—" ? cigCode : "Non disponibile"}
+- Importo stimato: ${formatCurrency(tender.importo) || "Non specificato"}
+- Stazione appaltante: ${tender.stazione_appaltante || "Non specificata"}
+- CPV: ${tender.descrizione_cpv || "Non specificato"}
+- Tipo contratto: ${tender.tipo_contratto || "Non specificato"}
+- Scadenza offerte: ${formatDate(tender.data_scadenza) || "Non specificata"}
+- Fonte: ${tender.sources?.toUpperCase() || "Non specificata"}
+- Link fonte: ${sourceUrl || "Non disponibile"}
+
+Cerca sul web e fornisci un'analisi strutturata:
+
+1. **Sintesi** — cosa richiede il bando in 2-3 frasi semplici
+
+2. **Date chiave** — elenca tutte le date importanti trovate:
+   - Data pubblicazione
+   - Scadenza presentazione offerte
+   - Data apertura buste (se disponibile)
+   - Eventuali proroghe
+
+3. **Link utili** — cerca e fornisci i link diretti a:
+   - Pagina ufficiale del bando sulla piattaforma di e-procurement
+   - Pagina di download della documentazione di gara
+   - Disciplinare, capitolato, modelli di partecipazione se trovati
+   - Eventuali chiarimenti/FAQ pubblicati
+
+4. **Dove scaricare la documentazione** — indica esattamente su quale piattaforma e in quale sezione trovare i documenti di gara (es. Sintel, MePA, Start Toscana, sito della stazione appaltante)
+
+5. **Requisiti di partecipazione** — requisiti tecnici, economici e certificazioni necessarie
+
+6. **Consiglio rapido** — se vale la pena approfondire e perché
+
+IMPORTANTE: Includi sempre gli URL completi che trovi. Se non trovi un link, indicalo chiaramente.
+Rispondi in italiano, in modo professionale ma accessibile.`
+  }
 
   const handleAnalyze = async () => {
     const apiKey = getGeminiKey()
     if (!apiKey) return
     const cached = getCachedAnalysis(tenderId)
     if (cached) { setResult(cached); setExpanded(true); return }
-    setLoading(true); setError(null); setExpanded(true)
+    setLoading(true); setError(null); setExpanded(true); setFallbackMsg(null)
+    accumulatedRef.current = ""
+
     try {
-      const text = await analyzeWithGemini(apiKey, tender, sourceUrl)
-      setResult(text); setCachedAnalysis(tenderId, text)
+      const prompt = buildPrompt()
+      const callbacks: StreamCallbacks = {
+        onChunk: (text) => {
+          accumulatedRef.current += text
+          setResult(accumulatedRef.current)
+        },
+        onModelFallback: (from, to) => {
+          const shortTo = to.replace("gemini-", "")
+          setFallbackMsg(`Quota ${from.replace("gemini-", "")} esaurita — continuo con ${shortTo}`)
+          setTimeout(() => setFallbackMsg(null), 6000)
+        },
+        onContinuation: (part) => {
+          accumulatedRef.current += "\n\n---\n\n> **▸ Continuazione automatica**\n\n"
+          setResult(accumulatedRef.current)
+        },
+      }
+
+      const { text } = await analyzeWithStreamingAndGrounding(apiKey, prompt, callbacks)
+      setResult(text)
+      setCachedAnalysis(tenderId, text)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Errore durante l'analisi")
     } finally { setLoading(false) }
@@ -570,7 +458,7 @@ function AiAnalysisPanel({ tender, sourceUrl }: { tender: TenderItem; sourceUrl?
                 <Sparkles className="h-4 w-4 text-amber-500" />
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">Analisi AI</span>
               </div>
-              {result && (
+              {result && !loading && (
                 <div className="flex items-center gap-1">
                   <button onClick={handleCopy} className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40 transition-colors" title="Copia testo">
                     {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -585,15 +473,26 @@ function AiAnalysisPanel({ tender, sourceUrl }: { tender: TenderItem; sourceUrl?
                 </div>
               )}
             </div>
-            {loading && (<div className="flex items-center gap-2 text-sm text-muted-foreground py-4"><Loader2 className="h-4 w-4 animate-spin" /> Analisi in corso...</div>)}
+            {fallbackMsg && (
+              <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-100 dark:bg-amber-900/30 rounded-md px-3 py-1.5 mb-2">
+                <span>⚠️ {fallbackMsg}</span>
+              </div>
+            )}
+            {loading && !result && (<div className="flex items-center gap-2 text-sm text-muted-foreground py-4"><Loader2 className="h-4 w-4 animate-spin" /> Analisi in corso...</div>)}
             {error && (<p className="text-sm text-red-600">{error}</p>)}
             {result && (<div className="text-sm leading-relaxed text-foreground/90" dangerouslySetInnerHTML={{ __html: renderAiHtml(result) }} />)}
+            {loading && result && (
+              <div className="flex items-center gap-1.5 text-xs text-amber-500 mt-2 pt-2 border-t border-amber-200/50">
+                <Loader2 className="h-3 w-3 animate-spin" /> Generazione in corso...
+              </div>
+            )}
           </div>
         </div>
       )}
     </div>
   )
 }
+
 
 function ScadenzaBadge({ data }: { data: string | null }) {
   const days = daysUntil(data)
