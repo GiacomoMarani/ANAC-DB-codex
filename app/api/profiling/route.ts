@@ -28,6 +28,8 @@ export async function POST(req: Request) {
     // Backward compatibility: also accept `partita_iva` and `ragione_sociale`
     const rawQuery = (body.query || body.partita_iva || "") as string
     const rawRagioneSociale = body.ragione_sociale as string | undefined
+    // ANAC live data passed from frontend relay (dataset AGGIUDICATARI_NO_ACCORDO_QUADRO)
+    const anacData = (body.anacData || null) as Array<Record<string, unknown>> | null
 
     // Auto-detect: if the input is numeric (optionally prefixed with IT), treat as P.IVA
     const cleanedQuery = rawQuery.trim().replace(/[\s\-\.]/g, "")
@@ -234,10 +236,31 @@ export async function POST(req: Request) {
 
     const scpData = scpResult.records
 
+    // ── Map ANAC live data (relay) to local format if present ─────
+    const anacLiveRecords = (anacData || []).map((r) => ({
+      codice_fiscale: String(r.cod_fisc_partecipante || lookupKey),
+      denominazione: String(r.denominazione_partecipante || ""),
+      cig: String(r.cig || ""),
+      importo_aggiudicazione: r.importo_aggiudicazione != null ? Number(r.importo_aggiudicazione) : null,
+      data_aggiudicazione: r.data_aggiudicazione_definitiva ? String(r.data_aggiudicazione_definitiva) : null,
+      codice_cpv: r.cod_cpv ? String(r.cod_cpv) : null,
+      descrizione_cpv: null as string | null,
+      oggetto_gara: r.oggetto_bando ? String(r.oggetto_bando) : null,
+      provincia: r.provincia ? String(r.provincia) : null,
+      ruolo: r.partecipante_ruolo ? String(r.partecipante_ruolo) : null,
+      tipo_appalto: r.oggetto_principale_contratto ? String(r.oggetto_principale_contratto) : null,
+      source: "anac_live" as const,
+    }))
+
+    if (anacLiveRecords.length > 0) {
+      console.log(`[profiling] ANAC live relay: ${anacLiveRecords.length} records for ${lookupKey}`)
+    }
+
     // Nome azienda per interrogare le gare europee su TED (CAN notices)
     const companyNameForTed =
       viesResult.name ||
       localData[0]?.denominazione ||
+      (anacLiveRecords.length > 0 ? anacLiveRecords[0].denominazione : null) ||
       scpData[0]?.denominazione ||
       null
 
@@ -250,12 +273,15 @@ export async function POST(req: Request) {
       }
     }
 
+    // Merge local + ANAC live records (ANAC live has priority for CPV data)
+    const combinedLocalRecords = [...localData.map((r) => ({
+      ...r,
+      source: "local" as const,
+    })), ...anacLiveRecords]
+
     // Unifica e deduplica con algoritmo a 3 livelli (CIG esatto, ID notice, Fuzzy heuristic)
     const { deduped: aggiudicatariData, stats: dedupStats } = deduplicateAwards({
-      localAwards: localData.map((r) => ({
-        ...r,
-        source: "local" as const,
-      })),
+      localAwards: combinedLocalRecords,
       scpAwards: scpData.map((r) => ({
         id: `scp:${r.cig}`,
         codice_fiscale: r.codice_fiscale,

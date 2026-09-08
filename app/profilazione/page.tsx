@@ -34,6 +34,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { isValidPartitaIva } from "@/lib/utils/piva"
 import { buildAnacCigUrl } from "@/lib/sources/types"
+import { useAnacRelay, AnacConnectButton } from "@/components/AnacConnectButton"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -573,6 +574,10 @@ export default function ProfilazionePage() {
   const cpvSectionRef = useRef<HTMLDivElement>(null)
   const bandiSectionRef = useRef<HTMLDivElement>(null)
 
+  // ── ANAC Live Relay ──
+  const anacRelay = useAnacRelay()
+  const [anacSource, setAnacSource] = useState<"live" | "cached" | null>(null)
+
   // ── Auto-detection: P.IVA/CF (numerico) o ragione sociale (testo) ──
   const isNumericInput = useMemo(() => detectIsNumeric(piva), [piva])
   const isValid = useMemo(() => isValidPivaFormat(piva), [piva])
@@ -626,13 +631,35 @@ export default function ProfilazionePage() {
     setExpandedCpv(null)
     setActiveProvinceFilter(null)
     setHighlightedCpv(null)
+    setAnacSource(null)
 
     try {
+      // ── Se il relay ANAC è connesso e l'input è numerico (P.IVA/CF),
+      //    query ANAC live per dati completi con CPV ──
+      let anacData: Record<string, unknown>[] | undefined
+      const cleanQuery = piva.trim().replace(/[\s\-\.]/g, "").replace(/^IT/i, "")
+
+      if (anacRelay.connected && detectIsNumeric(piva)) {
+        try {
+          const anacResult = await anacRelay.query(cleanQuery)
+          if (anacResult.rows && anacResult.rows.length > 0) {
+            anacData = anacResult.rows as Record<string, unknown>[]
+            setAnacSource("live")
+          }
+        } catch (anacErr) {
+          console.warn("[Profiling] ANAC relay query failed, fallback to cached:", anacErr)
+        }
+      }
+
       // Unified query: backend auto-detects P.IVA vs ragione sociale
+      // Se abbiamo dati ANAC live, li passiamo al backend per merge/arricchimento
       const res = await fetch("/api/profiling", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: piva.trim() }),
+        body: JSON.stringify({
+          query: piva.trim(),
+          ...(anacData ? { anacData } : {}),
+        }),
       })
 
       if (!res.ok) {
@@ -650,6 +677,7 @@ export default function ProfilazionePage() {
       }
 
       setProfile(data.profile)
+      if (!anacSource && data.profile) setAnacSource("cached")
 
       // Store historical tenders if returned
       if (data.recent_tenders && Array.isArray(data.recent_tenders)) {
@@ -685,7 +713,7 @@ export default function ProfilazionePage() {
     } finally {
       setLoading(false)
     }
-  }, [piva, isSearchValid])
+  }, [piva, isSearchValid, anacRelay, anacSource])
 
   const handleSelectCandidate = useCallback((pivaSelected: string) => {
     setCandidates([])
@@ -816,7 +844,11 @@ export default function ProfilazionePage() {
               <Search className="h-4 w-4" />
               Cerca azienda
             </span>
-            {/* Mode toggle */}
+            <AnacConnectButton
+              connected={anacRelay.connected}
+              onConnect={anacRelay.connect}
+              onDisconnect={anacRelay.disconnect}
+            />
           </div>
           <div className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
@@ -859,6 +891,23 @@ export default function ProfilazionePage() {
               Inserisci una Partita IVA, un Codice Fiscale o il nome dell&apos;azienda.
               I dati vengono cercati nell&apos;archivio ANAC, nella banca dati SCP/MIT e sul TED europeo.
             </p>
+            {anacSource && (
+              <div className="mt-2 flex items-center gap-2">
+                {anacSource === "live" ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-semibold text-emerald-600">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                    </span>
+                    📡 Dati live da ANAC Superset
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted border text-[10px] font-medium text-muted-foreground">
+                    💾 Dati cached + SCP/MIT + TED
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
