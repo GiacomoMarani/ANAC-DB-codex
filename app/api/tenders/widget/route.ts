@@ -14,6 +14,26 @@ import { NextRequest, NextResponse } from "next/server"
 
 const ITA_WIDGET = "https://www.get-cato.com/api/tenders/widget"
 
+/** Decode HTML entities (numeric &#NNN; &#xHH; and common named entities) */
+function decodeHtmlEntities(text: string | null): string | null {
+  if (!text) return text
+  return text
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&rsquo;/g, "\u2019")
+    .replace(/&lsquo;/g, "\u2018")
+    .replace(/&rdquo;/g, "\u201D")
+    .replace(/&ldquo;/g, "\u201C")
+    .replace(/&ndash;/g, "\u2013")
+    .replace(/&mdash;/g, "\u2014")
+    .replace(/&nbsp;/g, " ")
+}
+
 export async function GET(request: NextRequest) {
   const sp  = request.nextUrl.searchParams
   const cpv = sp.get("cpv") ?? ""
@@ -56,7 +76,7 @@ export async function GET(request: NextRequest) {
       return {
         id:             item.id,
         cig:            info.cig ?? item.cig ?? item.id,
-        oggetto:        item.title ?? item.oggetto ?? null,
+        oggetto:        decodeHtmlEntities(item.title as string ?? item.oggetto as string ?? null),
         importo:        parseFloat(String(info.importo ?? item.importo ?? 0)) || null,
         stato:          item.status ?? "active",
         data_scadenza:  info.data_scadenza ?? info.scadenza ?? item.data_scadenza_offerta ?? null,

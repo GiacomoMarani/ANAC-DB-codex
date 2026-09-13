@@ -8,7 +8,7 @@ import { lookupVies } from "@/lib/utils/vies"
 import { lookupScpMit, searchScpMitByName, type ScpAggiudicazione } from "@/lib/services/scpMit"
 import { lookupTedAwards, type TedAward } from "@/lib/services/tedAwards"
 import { deduplicateAwards, type UnifiedAward } from "@/lib/utils/dedupAwards"
-import { queryAggiudicatariByFiscalCode } from "@/lib/turso"
+import { queryAggiudicatariByFiscalCode } from "@/lib/sqlite-storico"
 import type { ProfilingResponse } from "@/lib/utils/piva"
 
 /**
@@ -239,7 +239,7 @@ export async function POST(req: Request) {
     const scpData = scpResult.records
 
     if (tursoData.length > 0) {
-      console.log(`[profiling] Turso storico: ${tursoData.length} records for ${lookupKey}`)
+      console.log(`[profiling] SQLite storico: ${tursoData.length} records for ${lookupKey}`)
     }
 
     // ── Map ANAC live data (relay) to local format if present ─────
@@ -292,7 +292,7 @@ export async function POST(req: Request) {
       provincia: r.provincia,
       ruolo: r.ruolo,
       tipo_appalto: r.tipo_contratto,
-      source: "turso_storico" as const,
+      source: "sqlite_storico" as const,
     }))
 
     // Merge local + ANAC live + Turso storico records

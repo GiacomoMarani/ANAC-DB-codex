@@ -54,6 +54,14 @@ export function SiteNav({ variant = "gare" }: SiteNavProps) {
           >
             Analisi avanzata
           </Link>
+          <a
+            href="https://tender-ai-pro.onrender.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:border-foreground/30 transition-all duration-150 whitespace-nowrap hidden sm:inline-flex"
+          >
+            Analizza documenti ↗
+          </a>
         </nav>
       </div>
     </header>

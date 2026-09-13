@@ -6,11 +6,10 @@
 
 import { useState, useCallback } from "react"
 import Link from "next/link"
-import { ArrowLeft, Globe, Loader2, CheckCircle2, Circle, Search, Euro, Clock, X, ChevronLeft, Mail, ExternalLink } from "lucide-react"
+import { ArrowLeft, Globe, Loader2, CheckCircle2, Circle, Search, Euro, Clock, X, ChevronLeft, Mail, ExternalLink, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { buildAnacCigUrl } from "@/lib/sources/types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +36,8 @@ interface TenderItem {
   tipo_contratto: string | null
   descrizione_cpv: string | null
   provincia: string | null
+  link_originale: string | null
+  sources: string | null
 }
 
 interface WidgetResponse { items: TenderItem[] }
@@ -227,6 +228,29 @@ export default function RicercaGarePage() {
               ))}
             </div>
           </div>
+
+          {/* Analizza Documenti — Link to Render */}
+          <div className="mt-16 border-2 border-primary/20 rounded-2xl p-8 bg-primary/5 text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <FileText className="h-6 w-6 text-primary" />
+              </div>
+            </div>
+            <h3 className="text-xl font-semibold mb-2">Hai già i documenti della gara?</h3>
+            <p className="text-muted-foreground text-sm max-w-lg mx-auto mb-6">
+              Carica i PDF e i documenti del bando per un&apos;analisi AI approfondita: requisiti di partecipazione, punteggi, criticità e consigli strategici.
+            </p>
+            <a
+              href="https://tender-ai-pro.onrender.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button size="lg" className="px-8" id="btn-analizza-documenti">
+                Analizza documenti gara <ExternalLink className="h-4 w-4 ml-2" />
+              </Button>
+            </a>
+            <p className="text-xs text-muted-foreground mt-3">Gratuito · Il primo caricamento potrebbe richiedere ~30 secondi per l&apos;avvio del server</p>
+          </div>
         </main>
       </div>
     )
@@ -358,7 +382,13 @@ export default function RicercaGarePage() {
                   Vedi analisi →
                 </Button>
               </div>
-              <p className="font-medium text-sm leading-snug mb-3 line-clamp-2">{tender.oggetto}</p>
+              <p className="font-medium text-sm leading-snug mb-3 line-clamp-2">
+                {tender.link_originale ? (
+                  <a href={tender.link_originale} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
+                    {tender.oggetto}
+                  </a>
+                ) : tender.oggetto}
+              </p>
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 {tender.importo && (
                   <span className="flex items-center gap-1">
@@ -367,13 +397,12 @@ export default function RicercaGarePage() {
                   </span>
                 )}
                 {tender.cig && (
-                  <a
-                    href={buildAnacCigUrl(tender.cig)}
-                    target="_blank" rel="noopener noreferrer"
+                  <Link
+                    href={`/gare?q=${encodeURIComponent(tender.cig)}`}
                     className="flex items-center gap-1 hover:text-primary transition-colors"
                   >
                     CIG: {tender.cig} <ExternalLink className="h-3 w-3" />
-                  </a>
+                  </Link>
                 )}
               </div>
             </div>
@@ -409,8 +438,8 @@ export default function RicercaGarePage() {
                 </div>
                 <span className="font-semibold text-sm uppercase tracking-wider">Report Gratuito</span>
               </div>
-              <h2 className="text-xl font-bold mb-3">Ricevi il report dettagliato della gara</h2>
-              <p className="text-sm opacity-70 mb-6">Analisi completa in PDF generata dall&apos;AI, direttamente nella tua casella email in circa 5 minuti.</p>
+              <h2 className="text-xl font-bold mb-3">Richiedi informazioni sulla gara</h2>
+              <p className="text-sm opacity-70 mb-6">Lascia i tuoi dati e ti contatteremo con un&apos;analisi personalizzata della gara selezionata.</p>
               <ul className="space-y-4 text-sm">
                 {[
                   ["1", "Riepilogo e requisiti", "Importo, tipo procedura, criterio di aggiudicazione, requisiti di partecipazione"],
@@ -431,7 +460,7 @@ export default function RicercaGarePage() {
             {/* Right panel */}
             <div className="flex-1 p-8 overflow-y-auto">
               <div className="flex items-start justify-between mb-6">
-                <h3 className="text-lg font-bold">Dove inviamo il report?</h3>
+                <h3 className="text-lg font-bold">Lascia i tuoi dati</h3>
                 <button onClick={() => { setReportModalId(null); setReportSent(false) }} className="text-muted-foreground hover:text-foreground" id="btn-chiudi-modal">
                   <X className="h-5 w-5" />
                 </button>
@@ -441,13 +470,13 @@ export default function RicercaGarePage() {
                   <CheckCircle2 className="h-12 w-12 text-primary mx-auto mb-4" />
                   <p className="font-semibold text-lg">Richiesta ricevuta!</p>
                   <p className="text-muted-foreground text-sm mt-2">
-                    I report personalizzati via email saranno disponibili a breve. Nel frattempo, puoi consultare tutti i bandi nella sezione{" "}
+                    Ti contatteremo al più presto. Nel frattempo, puoi consultare tutti i bandi nella sezione{" "}
                     <Link href="/gare" className="text-primary hover:underline">Gare →</Link>
                   </p>
                 </div>
               ) : (
                 <>
-                  <p className="text-sm text-muted-foreground mb-6">Il PDF arriverà nella tua casella email in circa 5 minuti.</p>
+                  <p className="text-sm text-muted-foreground mb-6">Ti contatteremo per fornirti un&apos;analisi personalizzata della gara.</p>
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-medium mb-1 block" htmlFor="report-nome">Nome</label>
@@ -461,10 +490,10 @@ export default function RicercaGarePage() {
                       <label className="text-sm font-medium mb-1 block" htmlFor="report-email">Email aziendale</label>
                       <Input id="report-email" type="email" placeholder="nome@azienda.it" value={reportForm.email} onChange={e => setReportForm(f => ({ ...f, email: e.target.value }))} />
                     </div>
-                    <Button className="w-full" id="btn-ricevi-report" onClick={() => { if (reportForm.email) { console.info("[Lead]", JSON.stringify({ nome: reportForm.nome, cognome: reportForm.cognome, email: reportForm.email, tenderId: reportModalId, ts: new Date().toISOString() })); setReportSent(true) } }}>
-                      Ricevi il report →
+                    <Button className="w-full" id="btn-ricevi-report" onClick={async () => { if (reportForm.email) { try { await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome: reportForm.nome, cognome: reportForm.cognome, email: reportForm.email, tender_id: reportModalId, ts: new Date().toISOString() }) }); } catch { /* silent */ } setReportSent(true) } }}>
+                      Invia richiesta →
                     </Button>
-                    <p className="text-center text-xs text-muted-foreground">Gratuito · Nessun impegno · In ~5 minuti</p>
+                    <p className="text-center text-xs text-muted-foreground">Gratuito · Nessun impegno</p>
                   </div>
                 </>
               )}

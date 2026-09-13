@@ -66,7 +66,6 @@ function guessCpvFromText(text: string): string[] {
   return [...new Set(matches)].slice(0, 3)
 }
 
-
 // ── SSRF protection (C3 security fix) ───────────────────────────────────────
 function isBlockedUrl(url: string): boolean {
   try {
@@ -114,7 +113,7 @@ async function scrapeWebsite(url: string): Promise<string> {
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 4000)
+      .slice(0, 12000)
   } catch {
     return ""
   }
@@ -144,29 +143,48 @@ Le keywords devono essere termini tecnici specifici dei prodotti/servizi offerti
 I cpv_ids devono essere le prime 2 cifre dei codici CPV europei più rilevanti per questa azienda.
 
 Testo del sito:
-${text.slice(0, 3000)}`
+${text.slice(0, 8000)}`
 
-  const apiRes = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 512 },
-      }),
-      signal: AbortSignal.timeout(15000),
+  // Model chain: try gemini-2.5-flash first, fallback to lite variant
+  const models = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite-preview-06-17",
+  ]
+
+  let lastError: Error | null = null
+  for (const model of models) {
+    try {
+      const apiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+          }),
+          signal: AbortSignal.timeout(15000),
+        }
+      )
+
+      if (apiRes.status === 429 || apiRes.status === 503) {
+        lastError = new Error(`${model}: quota exceeded (${apiRes.status})`)
+        continue
+      }
+      if (!apiRes.ok) throw new Error(`Gemini API error: ${apiRes.status}`)
+
+      const geminiData = await apiRes.json()
+      const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
+
+      // Extract JSON from response
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) throw new Error("Risposta Gemini non valida")
+      return JSON.parse(jsonMatch[0])
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
     }
-  )
-
-  if (!apiRes.ok) throw new Error(`Gemini API error: ${apiRes.status}`)
-  const geminiData = await apiRes.json()
-  const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
-
-  // Extract JSON from response
-  const jsonMatch = rawText.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) throw new Error("Risposta Gemini non valida")
-  return JSON.parse(jsonMatch[0])
+  }
+  throw lastError ?? new Error("Tutti i modelli Gemini hanno fallito")
 }
 
 function fallbackAnalysis(text: string, url: string): {
