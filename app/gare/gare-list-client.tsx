@@ -6,6 +6,8 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect, createContext, useContext } from "react"
 import useSWR from "swr"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import {
   Search, SlidersHorizontal, ChevronLeft, ChevronRight,
   ExternalLink, Clock, Euro, Building2, MapPin, FileText, Loader2,
@@ -205,13 +207,14 @@ function isPublishedWithinHours(d: string | null, hours: number): boolean {
 
 
 
-function AiKeyModal({ onClose }: { onClose: () => void }) {
+function AiKeyModal({ onClose, onKeyChange }: { onClose: () => void; onKeyChange: (enabled: boolean) => void }) {
   const [key, setKeyVal] = useState(getGeminiKey() || "")
   const [saved, setSaved] = useState(false)
 
   const handleSave = () => {
     if (key.trim()) {
       setGeminiKey(key.trim())
+      onKeyChange(true)
       setSaved(true)
       setTimeout(() => onClose(), 800)
     }
@@ -219,6 +222,7 @@ function AiKeyModal({ onClose }: { onClose: () => void }) {
 
   const handleRemove = () => {
     removeGeminiKey()
+    onKeyChange(false)
     setKeyVal("")
     setSaved(false)
   }
@@ -284,37 +288,50 @@ function AiKeyModal({ onClose }: { onClose: () => void }) {
 
 // ─── Helpers per rendering AI ────────────────────────────────────────────────
 
-function sanitizeHtml(html: string): string {
-  // Strip ALL HTML tags — the LLM output is Markdown, not HTML.
-  // Our renderAiHtml() will convert clean Markdown to trusted HTML.
-  return html
-    .replace(/<[^>]*>/g, "")
-    .replace(/javascript\s*:/gi, "")
-}
-
-function renderAiHtml(md: string): string {
-  // Sanitize first to prevent XSS from LLM grounded content
-  const safe = sanitizeHtml(md)
-  return safe
-    // Separatore orizzontale
-    .replace(/^---$/gm, '<hr class="border-amber-200 dark:border-amber-800/40 my-3" />')
-    // Titoli
-    .replace(/^#{1,4}\s+(.+)$/gm, '<div class="font-semibold text-amber-800 dark:text-amber-300 mt-3 mb-1">$1</div>')
-    // Bold
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    // Italic
-    .replace(/(?<![*])\*(?![*])(.*?)\*(?![*])/g, '<em>$1</em>')
-    // Markdown links [text](url)
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-0.5">$1 ↗</a>')
-    // Bare URLs
-    .replace(/(?<!["=])(https?:\/\/[^\s<,)]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline break-all">$1 ↗</a>')
-    // Numbered lists
-    .replace(/^(\d+)\.\s+(.+)$/gm, '<div class="flex gap-2 ml-1"><span class="text-amber-500 font-semibold shrink-0">$1.</span><span>$2</span></div>')
-    // Bullet lists
-    .replace(/^[-•]\s+(.+)$/gm, '<div class="flex gap-2 ml-3"><span class="text-amber-400">•</span><span>$1</span></div>')
-    // Line breaks
-    .replace(/\n/g, '<br/>')
-    .replace(/(<br\/>){3,}/g, '<br/><br/>')
+function AiAnalysisMarkdown({ content }: { content: string }) {
+  return (
+    <div className="min-w-0 font-[system-ui] text-[0.925rem] leading-7 text-slate-700">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        skipHtml
+        components={{
+          h1: ({ children }) => <h1 className="mt-8 mb-3 text-xl font-bold tracking-tight text-slate-950 first:mt-0">{children}</h1>,
+          h2: ({ children }) => <h2 className="mt-8 mb-3 border-b border-slate-200 pb-2 text-lg font-bold tracking-tight text-slate-950 first:mt-0">{children}</h2>,
+          h3: ({ children }) => <h3 className="mt-8 mb-3 border-b border-slate-200 pb-2 text-base font-bold tracking-tight text-slate-950 first:mt-0">{children}</h3>,
+          h4: ({ children }) => <h4 className="mt-5 mb-2 font-semibold text-slate-950">{children}</h4>,
+          p: ({ children }) => <p className="my-3 max-w-5xl text-pretty">{children}</p>,
+          ul: ({ children }) => <ul className="my-3 max-w-5xl list-disc space-y-1.5 pl-6 marker:text-violet-500">{children}</ul>,
+          ol: ({ children }) => <ol className="my-3 max-w-5xl list-decimal space-y-1.5 pl-6 marker:font-semibold marker:text-violet-600">{children}</ol>,
+          li: ({ children }) => <li className="pl-1">{children}</li>,
+          strong: ({ children }) => <strong className="font-semibold text-slate-950">{children}</strong>,
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 transition-colors hover:text-blue-900"
+            >
+              {children}<span aria-hidden="true"> ↗</span>
+            </a>
+          ),
+          blockquote: ({ children }) => <blockquote className="my-4 max-w-5xl border-l-4 border-violet-400 bg-violet-50 px-4 py-2 text-slate-700">{children}</blockquote>,
+          hr: () => <hr className="my-6 border-slate-200" />,
+          table: ({ children }) => (
+            <div className="my-4 max-w-5xl overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+              <table className="w-full min-w-[620px] border-collapse text-left text-sm [&_tbody_tr:nth-child(even)]:bg-slate-50">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => <thead className="bg-slate-100 text-slate-950">{children}</thead>,
+          th: ({ children }) => <th className="border-b border-r border-slate-200 px-4 py-2.5 font-semibold last:border-r-0">{children}</th>,
+          td: ({ children }) => <td className="border-b border-r border-slate-200 px-4 py-2.5 align-top last:border-r-0 [&_a]:break-words">{children}</td>,
+          pre: ({ children }) => <pre className="my-4 max-w-5xl overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs leading-6 text-slate-100">{children}</pre>,
+          code: ({ children }) => <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-900">{children}</code>,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
 }
 
 function downloadFile(content: string, filename: string, mimeType: string) {
@@ -345,7 +362,7 @@ ${content
 
 // ─── AI Analysis Panel (inline expandable) ───────────────────────────────────
 
-function AiAnalysisPanel({ tender, sourceUrl }: { tender: TenderItem; sourceUrl?: string }) {
+function AiAnalysisPanel({ tender, sourceUrl, enabled }: { tender: TenderItem; sourceUrl?: string; enabled: boolean }) {
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading]   = useState(false)
   const [result, setResult]     = useState<string | null>(null)
@@ -383,6 +400,7 @@ function AiAnalysisPanel({ tender, sourceUrl }: { tender: TenderItem; sourceUrl?
 
 Cerca sul web usando il CIG, il nome della stazione appaltante e l'oggetto del bando.
 Fornisci un'analisi strutturata con ESATTAMENTE queste 6 sezioni:
+Usa Markdown GitHub Flavored valido: titoli di terzo livello, tabelle con intestazioni e liste puntate. Non usare HTML.
 
 ### 1. Sintesi
 Cosa richiede il bando in 2-3 frasi chiare. Indica il settore merceologico e la tipologia di prestazione (fornitura, servizio, lavori).
@@ -459,13 +477,12 @@ Valutazione sintetica: vale la pena approfondire? Per quale tipo di azienda? Pun
     setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
 
-  const hasKey = typeof window !== "undefined" && !!getGeminiKey()
-  if (!hasKey) return null
+  if (!enabled) return null
 
   return (
     <div className="pt-2">
       {!expanded ? (
-        <button onClick={handleAnalyze} className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors">
+        <button onClick={handleAnalyze} className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-600 transition-colors hover:text-violet-800">
           <Sparkles className="h-3.5 w-3.5" /> Analizza con AI
         </button>
       ) : (
@@ -473,37 +490,41 @@ Valutazione sintetica: vale la pena approfondire? Per quale tipo di azienda? Pun
           <button onClick={() => setExpanded(false)} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
             <ChevronUp className="h-3 w-3" /> Chiudi analisi
           </button>
-          <div className="rounded-lg border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800/40 p-4">
-            <div className="flex items-center justify-between mb-3">
+          <div className="rounded-xl border border-l-4 border-slate-200 border-l-violet-500 bg-slate-50/80 p-4 shadow-sm sm:p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-500" />
-                <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">Analisi AI</span>
+                <Sparkles className="h-4 w-4 text-violet-600" />
+                <span className="text-sm font-semibold text-slate-900">Analisi AI</span>
               </div>
               {result && !loading && (
-                <div className="flex items-center gap-1">
-                  <button onClick={handleCopy} className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40 transition-colors" title="Copia testo">
+                <div className="flex flex-wrap items-center justify-end gap-1">
+                  <button onClick={handleCopy} className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-200/80 hover:text-slate-950" title="Copia testo">
                     {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                     {copied ? "Copiato!" : "Copia"}
                   </button>
-                  <button onClick={() => downloadFile(result, fileName + '.md', 'text/markdown')} className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40 transition-colors" title="Scarica come Markdown">
+                  <button onClick={() => downloadFile(result, fileName + '.md', 'text/markdown')} className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-200/80 hover:text-slate-950" title="Scarica come Markdown">
                     <Download className="h-3 w-3" /> .md
                   </button>
-                  <button onClick={() => downloadAsDocx(result, fileName)} className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40 transition-colors" title="Scarica come Word">
+                  <button onClick={() => downloadAsDocx(result, fileName)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-200/80 hover:text-slate-950" title="Scarica come Word">
                     <Download className="h-3 w-3" /> .doc
                   </button>
                 </div>
               )}
             </div>
             {fallbackMsg && (
-              <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-100 dark:bg-amber-900/30 rounded-md px-3 py-1.5 mb-2">
+              <div className="mb-2 flex items-center gap-2 rounded-md bg-amber-100 px-3 py-1.5 text-xs text-amber-700">
                 <span>⚠️ {fallbackMsg}</span>
               </div>
             )}
             {loading && !result && (<div className="flex items-center gap-2 text-sm text-muted-foreground py-4"><Loader2 className="h-4 w-4 animate-spin" /> Analisi in corso...</div>)}
             {error && (<p className="text-sm text-red-600">{error}</p>)}
-            {result && (<div className="text-sm leading-relaxed text-foreground/90" dangerouslySetInnerHTML={{ __html: renderAiHtml(result) }} />)}
+            {result && (
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <AiAnalysisMarkdown content={result} />
+              </div>
+            )}
             {loading && result && (
-              <div className="flex items-center gap-1.5 text-xs text-amber-500 mt-2 pt-2 border-t border-amber-200/50">
+              <div className="mt-2 flex items-center gap-1.5 border-t border-slate-200 pt-2 text-xs text-violet-600">
                 <Loader2 className="h-3 w-3 animate-spin" /> Generazione in corso...
               </div>
             )}
@@ -614,6 +635,7 @@ export function GareListClient() {
   const [cpv,      setCpv]      = useState(initialCpv)
   const [page,     setPage]     = useState(initialPage)
   const [showAiModal, setShowAiModal] = useState(false)
+  const [hasAiKey, setHasAiKey] = useState(false)
   const [showRecent, setShowRecent] = useState(false)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const searchRef = useRef<HTMLDivElement>(null)
@@ -632,6 +654,7 @@ export function GareListClient() {
   // Load recent searches on mount
   useEffect(() => {
     setRecentSearches(getRecentSearches())
+    setHasAiKey(!!getGeminiKey())
   }, [])
 
   // Save search when debounced value changes (user finished typing)
@@ -984,12 +1007,12 @@ export function GareListClient() {
           className="ml-auto gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700"
         >
           <Sparkles className="h-3.5 w-3.5" />
-          {getGeminiKey() ? "AI attiva" : "Configura AI"}
+          {hasAiKey ? "AI attiva" : "Configura AI"}
         </Button>
       </div>
 
       {/* AI Key Modal */}
-      {showAiModal && <AiKeyModal onClose={() => setShowAiModal(false)} />}
+      {showAiModal && <AiKeyModal onClose={() => setShowAiModal(false)} onKeyChange={setHasAiKey} />}
 
       {/* ── ANAC DB Panel ── */}
       {isAnacMode && (
@@ -1059,7 +1082,7 @@ export function GareListClient() {
       <SearchQueryContext.Provider value={deferredSearch}>
       <div className="space-y-4">
         {items.map(tender => (
-          <TenderCard key={tender.id} tender={tender} />
+          <TenderCard key={tender.id} tender={tender} aiEnabled={hasAiKey} />
         ))}
       </div>
       </SearchQueryContext.Provider>
@@ -1114,7 +1137,7 @@ function getLotti(cig: CigLotto[] | string | null): CigLotto[] {
   return []
 }
 
-function TenderCard({ tender }: { tender: TenderItem }) {
+function TenderCard({ tender, aiEnabled }: { tender: TenderItem; aiEnabled: boolean }) {
   const searchQuery = useContext(SearchQueryContext)
   const days     = daysUntil(tender.data_scadenza)
   const isActive = tender.stato === "active" || (days !== null && days > 0) || tender.sources === "anac"
@@ -1262,7 +1285,7 @@ function TenderCard({ tender }: { tender: TenderItem }) {
       </div>
 
       {/* AI Analysis */}
-      <AiAnalysisPanel tender={tender} sourceUrl={sourceUrl} />
+      <AiAnalysisPanel tender={tender} sourceUrl={sourceUrl} enabled={aiEnabled} />
     </div>
   )
 }
