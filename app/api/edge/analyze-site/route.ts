@@ -145,10 +145,11 @@ I cpv_ids devono essere le prime 2 cifre dei codici CPV europei più rilevanti p
 Testo del sito:
 ${text.slice(0, 8000)}`
 
-  // Model chain: try gemini-2.5-flash first, fallback to lite variant
+  // Last updated: 2026-11-24 from https://ai.google.dev/gemini-api/docs/models
+  // Stable, Free Tier text generation chain. This route does not use grounding.
   const models = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite-preview-06-17",
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
   ]
 
   let lastError: Error | null = null

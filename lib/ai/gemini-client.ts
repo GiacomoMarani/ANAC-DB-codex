@@ -7,7 +7,7 @@
  * Gemini AI client for tender analysis — browser-side, zero external deps.
  *
  * Architecture inspired by Tender AI Render (server.js):
- * - Model chain: gemini-3.6-flash → 3.5-flash-lite → 3.1-flash-lite → 2.5-flash-lite → 2.5-flash
+ * - Model chain: gemini-3.8-flash → gemini-3.5-flash-lite
  * - Multi-pass quota retry with exponential backoff (3 passes, 5s/15s)
  * - Streaming via fetch + ReadableStream (SSE-like chunked response)
  * - Auto-continuation on MAX_TOKENS (up to 6 parts)
@@ -18,41 +18,40 @@
 // Source: https://ai.google.dev/gemini-api/docs/pricing
 // All models below are confirmed to have a Free Tier on Google AI.
 //
-// ⚠️ IMPORTANT CONSTRAINTS (verified 2026-09-08):
-// - gemini-2.0-flash and gemini-2.0-flash-lite were SHUT DOWN on June 1, 2026
-// - Google Search Grounding on free tier is ONLY available for gemini-2.5-*
-//   (gemini-3.x requires paid tier for grounding)
-// - Quotas are per-project, not per-key (multiple keys share the same pool)
+// IMPORTANT CONSTRAINTS (verified 2026-11-24):
+// - gemini-2.5-flash is deprecated and routes to gemini-3.5-flash-lite from 2026-12-01.
+// - Google Search Grounding on the Free Tier remains available only to gemini-2.5-*.
+//   Gemini 3.x supports grounding only on the Paid Tier.
+// - Quotas are per-project, not per-key (multiple keys share the same pool).
 //
 // Two chains are used:
 // 1. STREAMING_MODELS: for text generation (3.x = most capable, cascade down)
 // 2. GROUNDING_MODELS: for Google Search grounding (only 2.5 family works free)
 
-/** Primary model for text generation — most capable available */
-export const DEFAULT_MODEL = "gemini-2.5-flash"
+/** Primary model for text generation — current stable Flash model. */
+export const DEFAULT_MODEL = "gemini-3.8-flash"
 
 /** Fallback chain for streaming text generation.
- *  Ordered: most capable → lightest (highest free-tier RPM/RPD).
- *  Last updated: 2026-09-08 from https://ai.google.dev/gemini-api/docs/models
+ *  Ordered: most capable → lightest.
+ *  Last updated: 2026-11-24 from https://ai.google.dev/gemini-api/docs/models
  *
- *  | Model               | Free RPM | Free RPD | Free TPM    | Status  |
- *  |---------------------|----------|----------|-------------|---------|
- *  | gemini-3.8-flash    | 15       | 1,500    | 1,000,000   | Stable  |
- *  | gemini-3.5-flash    | 15       | 1,500    | 1,000,000   | Stable  |
- *  | gemini-3.5-flash-lite| 30      | 1,500    | 1,000,000   | Stable  |
- *  | gemini-2.5-flash    | 15       | 1,500    | 1,000,000   | Stable  |
- *  | gemini-2.5-flash-lite| 15-30   | 1,500    | 1,000,000   | Stable  |
+ *  | Model                  | Free Tier | Grounding Free | Status |
+ *  |------------------------|-----------|----------------|--------|
+ *  | gemini-3.8-flash       | Yes       | No             | Stable |
+ *  | gemini-3.5-flash-lite  | Yes       | No             | Stable |
+ *
+ *  Rate limits vary by Google Cloud project and must be checked in AI Studio.
  */
 export const FALLBACK_MODELS = [
-  "gemini-2.5-flash-lite-preview-06-17",  // Lite variant, high free quota (30 RPM)
+  "gemini-3.5-flash-lite",
 ] as const
 
 /** Models that support Google Search grounding on free tier.
- *  ONLY the 2.5 family supports grounding for free (up to 500 RPD shared).
- *  Gemini 3.x requires paid tier for grounding. */
+ *  The legacy 2.5 Flash-Lite endpoint is stable for existing users and has a
+ *  shared allowance of up to 500 grounded prompts/day on the Free Tier.
+ *  Gemini 3.x requires a Paid Tier for grounding. */
 export const GROUNDING_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite-preview-06-17",
+  "gemini-2.5-flash-lite",
 ] as const
 
 const MAX_OUTPUT_TOKENS = 8192
